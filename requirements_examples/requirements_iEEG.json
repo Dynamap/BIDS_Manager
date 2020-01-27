@@ -1,0 +1,122 @@
+{
+ "Requirements": {
+  "Subject": {
+   "keys": {
+    "age": "",
+    "sex": [
+     "F",
+     "M",
+     "N"
+    ],
+    "epilepsy_type": [
+     "MTLE",
+     "TLE",
+     "FLE",
+     "PLE",
+     "OLE",
+     "BiT"
+    ],
+    "Engel_Score": [
+     "I",
+     "II",
+     "III",
+     "IV"
+    ],
+    "lesion": [
+     "yes",
+     "no"
+    ]
+   },
+   "required_keys": [
+    "age",
+    "sex",
+    "epilepsy_type"
+   ],
+   "Ieeg": [
+    {
+     "amount": 1,
+     "type": {
+      "ses": "postimp",
+      "task": "seizure",
+      "run": "_",
+      "modality": "ieeg"
+     }
+    }
+   ],
+   "Anat": [
+    {
+     "amount": 1,
+     "type": {
+      "ses": "preop",
+      "run": "01",
+      "modality": "T1w"
+     }
+    },
+    {
+     "amount": 1,
+     "type": {
+      "ses": "postimp",
+      "run": "01",
+      "modality": "_"
+     }
+    },
+    {
+     "amount": 1,
+     "type": {
+      "ses": "postop",
+      "run": "01",
+      "modality": "_"
+     }
+    }
+   ]
+  },
+  "Anat": {
+   "keys": {
+    "ses": [
+     "preop",
+     "postop",
+     "postimp"
+    ]
+   }
+  },
+  "Ieeg": {
+   "keys": {
+    "ses": [
+     "postimp"
+    ],
+    "task": [
+     "rest",
+     "seizure",
+     "sleep"
+    ]
+   }
+  },
+  "IeegGlobalSidecars": {
+   "keys": {
+    "ses": [
+     "postimp"
+    ],
+    "space": [
+     "MNI",
+     "other"
+    ]
+   }
+  }
+ },
+ "Converters": {
+  "Imaging": {
+   "path": "<Put the path of dicm2nii>",
+   "ext": [
+    ".nii"
+   ]
+  },
+  "Electrophy": {
+   "path": "<Put the path of AnyWave>",
+   "ext": [
+    ".vhdr",
+    ".vmrk",
+    ".eeg"
+   ]
+  }
+ }
+}
