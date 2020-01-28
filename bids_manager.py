@@ -2540,9 +2540,6 @@ class RequirementsDialog(TemplateDialog):
         self.bids_dir = bids_dir
         self.error_str=''
         self.modif_file = filename
-        self.info_butt_removed = []
-        self.mod_butt_removed = []
-        self.mod_required_butt_removed = []
         self.info_val_removed = []
         self.mod_required_removed = []
         self.mod_removed = []
@@ -2684,7 +2681,7 @@ class RequirementsDialog(TemplateDialog):
         self.info_button.append(l3)
         idx_beg = self.info_button.index(l1)
         idx_val = len(self.info_key_label)-1
-        l5 = Button(self.frame_subject_info.frame, text='-', command=lambda: self.remove_lines_command(idx_beg, idx_val))
+        l5 = Button(self.frame_subject_info.frame, text='-', command=lambda: self.remove_lines_command(idx_val))
         l5.grid(row=cnt, column=3)
         self.info_button.append(l5)
 
@@ -2697,7 +2694,7 @@ class RequirementsDialog(TemplateDialog):
         self.btn_ok.pack(side=LEFT, anchor='sw', expand=1, padx=10, pady=5)
         self.btn_cancel.pack(side=RIGHT, anchor='se', expand=1, padx=10, pady=5)
 
-    def remove_lines_command(self, idx_button, idx_val, mod=False, required=False):
+    def remove_lines_command(self, idx_val, mod=False, required=False):
         if mod:
             if required:
                 req = 'required_'
@@ -2706,11 +2703,9 @@ class RequirementsDialog(TemplateDialog):
             keys = eval('self.modality_'+req+'key')
             button = eval('self.modality_'+req+'button')
             label = eval('self.modality_'+req+'label')
-            butt2removed = eval('self.mod_' + req + 'butt_removed')
             idx_val_removed = eval('self.mod_' + req + 'removed')
             try:
                 number_line = len(keys[idx_val])
-                butt2removed.append(idx_button)
                 num = -1
                 for i in range(0, len(keys), 1):
                     num = num + len(keys[i]) + 1
@@ -2718,9 +2713,7 @@ class RequirementsDialog(TemplateDialog):
                         num = num - len(keys[i]) - 1
                     elif idx_val <= i:
                         break
-                if idx_button != num:
-                    idx_button = num
-                idx_button = idx_button - number_line
+                idx_button = num - number_line
                 idx = 1
                 while idx <= number_line + 1:
                     button[idx_button].grid_forget()
@@ -2730,18 +2723,21 @@ class RequirementsDialog(TemplateDialog):
                     keys[idx_val][key].grid_forget()
                 label[idx_val].grid_forget()
                 idx_val_removed.append(idx_val)
+                if not required:
+                    self.modality_name[idx_val] = ''
             except IndexError:
                 self.attributes("-topmost", False)
                 messagebox.showerror('Error', 'There are no buttons to delete')
                 self.attributes("-topmost", True)
         else:
             idx = 1
-            num = 0
-            self.info_butt_removed.append(idx_button)
-            for val in self.info_butt_removed:
-                if idx_button > val:
-                    num += 1
-            idx_button = idx_button - num*4
+            num = 3
+            #self.info_butt_removed.append(idx_button)
+            if idx_val != 0:
+                for i in range(1, idx_val, 1):
+                    if i not in self.info_val_removed:
+                        num += 4
+            idx_button = num - 3
             while idx < 5:
                 self.info_button[idx_button].grid_forget()
                 del self.info_button[idx_button]
@@ -2764,9 +2760,17 @@ class RequirementsDialog(TemplateDialog):
 
         if mod:
             if required and flag_first:
-                parent_list = [self.frame_required, self.frame_modality]
+                if mod not in self.modality_name:
+                    parent_list = [self.frame_required, self.frame_modality]
+                else:
+                    parent_list = [self.frame_required]
             elif required and not flag_first:
                 parent_list = [self.frame_required]
+            elif not required and mod in self.modality_name:
+                self.attributes("-topmost", False)
+                messagebox.showinfo('Information', '{} is already presents.'.format(mod))
+                self.attributes("-topmost", True)
+                return
             else:
                 parent_list = [self.frame_modality]
             required_value = {nbr: {} for nbr in range(0, len(parent_list), 1)}
@@ -2799,8 +2803,15 @@ class RequirementsDialog(TemplateDialog):
                             required_key[nbr][elt] = ''
                             if dict_val:
                                 val = ''
-                                if 'type' in dict_val and elt in dict_val['type']:
-                                    val = dict_val['type'][elt]
+                                if 'type' in dict_val:
+                                    if isinstance(dict_val['type'], dict) and elt in dict_val['type']:
+                                        val = dict_val['type'][elt]
+                                    elif isinstance(dict_val['type'], list):
+                                        val = []
+                                        for type in dict_val['type']:
+                                            if elt in type:
+                                                val.append(type[elt])
+                                        val = list(set(val))
                                 elif elt in dict_val:
                                     val = dict_val[elt]
                                 if isinstance(val, list):
@@ -2833,12 +2844,20 @@ class RequirementsDialog(TemplateDialog):
                         l = Listbox(parent.frame, exportselection=0, selectmode=MULTIPLE, height=3)
                         for item in required_value[nbr][key]:
                             l.insert(END, item)
-                        if dict_val and key in dict_val['type']:
-                            val = dict_val['type'][key]
-                            if val != '_':
-                                idx = required_value[nbr][key].index(val)
-                                l.selection_set(idx)
-                                required_value[nbr][key] = l
+                        if dict_val:
+                            if isinstance(dict_val['type'], dict) and key in dict_val['type']:
+                                val = dict_val['type'][key]
+                                if val != '_':
+                                    idx = required_value[nbr][key].index(val)
+                                    l.selection_set(idx)
+                            elif isinstance(dict_val['type'], list):
+                                val = []
+                                for type in dict_val['type']:
+                                    if key in type:
+                                        idx = required_value[nbr][key].index(type[key])
+                                        l.selection_set(idx)
+
+                        required_value[nbr][key] = l
                     else:
                         l = Entry(parent.frame, textvariable=required_value[nbr][key])
                     l.grid(row=line_num + cnt + init_num+1, column=1)
@@ -2850,7 +2869,7 @@ class RequirementsDialog(TemplateDialog):
                 eval('self.modality_' + req + 'label.append(lab)')
                 idx_val[nbr] = len(eval('self.modality_' + req + 'label')) - 1
                 idx_butt[nbr] = len(eval('self.modality_' + req + 'button'))
-                m[nbr] = Button(parent.frame, text='-', command=lambda but=idx_butt[nbr], val=idx_val[nbr], mod_bool=True, req_bool=required_dict[nbr]: self.remove_lines_command(but, val, mod=mod_bool, required=req_bool))
+                m[nbr] = Button(parent.frame, text='-', command=lambda val=idx_val[nbr], mod_bool=True, req_bool=required_dict[nbr]: self.remove_lines_command(val, mod=mod_bool, required=req_bool))
                 m[nbr].grid(row=line_num + init_num, column=2)
                 eval('self.modality_' + req + 'button.append(m[nbr])')
 
@@ -2890,40 +2909,26 @@ class RequirementsDialog(TemplateDialog):
             self.imag_name = req_dict['Converters']['Imaging']['path']
 
     def ok(self):
+        def call_raise(parent, error):
+            parent.attributes("-topmost", False)
+            messagebox.showerror('Error', error)
+            parent.attributes("-topmost", True)
+
         self.error_str = ''
         if not self.elec_name or 'AnyWave' not in os.path.basename(self.elec_name):
-            self.error_str += 'Bids Manager requires AnyWave to convert electrophy. data. '
-            pass
+            self.error_str += 'Bids Manager requires AnyWave to convert electrophy data.\n'
         if not self.imag_name or 'dicm2nii' not in os.path.basename(self.imag_name):
-            self.error_str += 'Bids Manager requires dcm2niix to convert Imaging data. '
-            pass
-        if self.info_val_removed:
-            self.info_val_removed.sort(reverse=True)
-            for val in self.info_val_removed:
-                del self.info_value_label[val]
-                del self.info_key_label[val]
-                del self.req_button[val]
-            self.info_val_removed = []
-        if self.mod_removed:
-            self.mod_removed.sort(reverse=True)
-            for val in self.mod_removed:
-                del self.modality_key[val]
-                del self.modality_name[val]
-                del self.modality_value[val]
-                del self.modality_label[val]
-            self.mod_removed = []
-        if self.mod_required_removed:
-            self.mod_required_removed.sort(reverse=True)
-            for val in self.mod_required_removed:
-                del self.modality_required_key[val]
-                del self.modality_required_name[val]
-                del self.modality_required_value[val]
-                del self.modality_required_label[val]
-            self.mod_required_removed = []
+            self.error_str += 'Bids Manager requires dcm2niix to convert Imaging data.\n'
+
+        if self.error_str:
+            call_raise(self, self.error_str)
+            return
 
         if self.import_req.get():
             if not self.req_name:
-                self.error_str = 'Bids Manager requires a requirements.json file to be operational. '
+                error = 'Bids Manager requires a requirements.json file to be operational.\n'
+                call_raise(self, error)
+                return
             else:
                 req_dict = bids.Requirements(self.req_name)
         elif self.create_req.get() or self.load_add.get():
@@ -2936,44 +2941,45 @@ class RequirementsDialog(TemplateDialog):
             required_keys = []
 
             for i, elt in enumerate(self.info_key_label):
-                value = self.info_value_label[i].get()
-                key = elt.get()
-                if not key:
-                    if not self.req_name:
-                        self.error_str = 'Subject"s information are missing'
-                    break
-                else:
-                    if ' ' in key and not key.endswith(' '):
-                        key = key.replace(' ', '_')
+                if i not in self.info_val_removed:
+                    value = self.info_value_label[i].get()
+                    key = elt.get()
+                    if not key:
+                        if not self.req_name:
+                            error = 'Subject"s information are missing.\n'
+                            call_raise(self, error)
+                            return
+                    else:
+                        if ' ' in key and not key.endswith(' '):
+                            key = key.replace(' ', '_')
 
-                if ',' not in value:
-                    keys[key] = value
-                else:
-                    list_val = value.split(',')
-                    keys[key] = []
-                    for val in list_val:
-                        if ' ' in val:
-                            keys[key].append(val.replace(' ', ''))
-                        else:
-                            keys[key].append(val)
-                    # if len(list_val) < 2:
-                    #     list_val = value.split(',')
-                    #keys[key] = [val.replace(' ', '') for val in list_val]
-                if self.req_button[i].get():
-                    required_keys.append(key)
+                    if ',' not in value:
+                        keys[key] = value
+                    else:
+                        list_val = value.split(',')
+                        keys[key] = []
+                        for val in list_val:
+                            if ' ' in val:
+                                keys[key].append(val.replace(' ', ''))
+                            else:
+                                keys[key].append(val)
+                    if self.req_button[i].get():
+                        required_keys.append(key)
 
             req_dict['Requirements']['Subject']['keys'] = keys
             req_dict['Requirements']['Subject']['required_keys'] = required_keys
-            if not self.error_str:
-                #to get the required modality for the database
-                verif_type = {mod: [] for mod in list(set(self.modality_required_name))}
-                for i, mod in enumerate(self.modality_required_key):
+
+            #to get the required modality for the database
+            #self.del_from_list(flag_req=True)
+            verif_type = {mod: [] for mod in list(set(self.modality_required_name))}
+            for i, mod in enumerate(self.modality_required_key):
+                if i not in self.mod_required_removed:
                     if self.modality_required_name[i] not in req_dict['Requirements']['Subject'].keys():
                         req_dict['Requirements']['Subject'][self.modality_required_name[i]] = []
                     mod_dict = {}
                     type_list = []
                     type_dict = {}
-                    for key in mod:
+                    for j, key in enumerate(mod):
                         if isinstance(self.modality_required_value[i][key], StringVar):
                             value = self.modality_required_value[i][key].get()
                         elif isinstance(self.modality_required_value[i][key], Listbox):
@@ -2984,8 +2990,9 @@ class RequirementsDialog(TemplateDialog):
                             if value.isdigit() or value is '_':
                                 type_dict[key] = value
                             else:
-                                self.error_str = 'Run should be numerical value or "_"'
-                                break
+                                error = 'Run should be numerical value or "_" in required mod {}.\n'.format(self.modality_required_name[i])
+                                call_raise(self, error)
+                                return
                         elif value and isinstance(value, list):
                             for v, val in enumerate(value):
                                 type_list.append({clef: type_dict[clef] for clef in type_dict})
@@ -3005,14 +3012,20 @@ class RequirementsDialog(TemplateDialog):
                     if self.modality_required_name[i] in bids.GlobalSidecars.get_list_subclasses_names():
                         if isinstance(mod_dict['type'], dict):
                             if 'space' and 'acq' in mod_dict['type'].keys():
-                                self.error_str += 'For the modality GlobalSidecars, you cannot have both space and acq.\n "acq" goes with Photo, and "space" goes with electrodes or coordsystem.\n'
+                                error = 'For the modality GlobalSidecars, you cannot have both space and acq.\n "acq" goes with Photo, and "space" goes with electrodes or coordsystem.\n'
+                                call_raise(self, error)
+                                return
                         elif isinstance(mod_dict['type'], list):
                             for elt in mod_dict['type']:
                                 if 'space' and 'acq' in elt.keys():
-                                    self.error_str += 'For the modality GlobalSidecars, you cannot have both space and acq.\n "acq" goes with Photo, and "space" goes with electrodes or coordsystem.\n'
+                                    error = 'For the modality GlobalSidecars, you cannot have both space and acq.\n "acq" goes with Photo, and "space" goes with electrodes or coordsystem.\n'
+                                    call_raise(self, error)
+                                    return
                     req_dict['Requirements']['Subject'][self.modality_required_name[i]].append(mod_dict)
-                #To get the possible keys in modality
-                for i, mod in enumerate(self.modality_name):
+            #self.del_from_list(flag_mod=True)
+            #To get the possible keys in modality
+            for i, mod in enumerate(self.modality_name):
+                if i not in self.mod_removed:
                     if mod not in req_dict['Requirements'].keys():
                         req_dict['Requirements'][mod] = {}
                         key_dict = {}
@@ -3036,35 +3049,59 @@ class RequirementsDialog(TemplateDialog):
                         else:
                             if mod in verif_type:
                                 if key in verif_type[mod] and key != 'run':
-                                    self.error_str += 'Be carefull, in {0} required {1} is mentionned but not in possible modalities.\n'.format(mod, key)
+                                    error = 'Be carefull, in {0} required {1} is mentionned but not in possible modalities.\n'.format(mod, key)
+                                    call_raise(self, error)
+                                    return
                     if any(mod not in list(self.modality_name) for mod in verif_type):
-                        self.error_str += 'Error: Some required modalities (2nd column) are not in possible modalities (3rd column).\n'
+                        error = 'Error: Some required modalities (2nd column) are not in possible modalities (3rd column).\n'
+                        call_raise(self, error)
                     req_dict['Requirements'][mod]['keys'] = key_dict
         else:
-            self.error_str += 'Bids Manager requires a requirements.json file to be operational. '
-            pass
+            error = 'Bids Manager requires a requirements.json file to be operational.\n'
+            call_raise(self, error)
 
-        if self.error_str:
+        bids.BidsDataset.converters['Imaging']['path'] = self.imag_name
+        req_dict['Converters']['Imaging']['path'] = self.imag_name
+        req_dict['Converters']['Imaging']['ext'] = ['.nii']
+        bids.BidsDataset.converters['Electrophy']['path'] = self.elec_name
+        req_dict['Converters']['Electrophy']['path'] = self.elec_name
+        req_dict['Converters']['Electrophy']['ext'] = ['.vhdr', '.vmrk', '.eeg']
+        bids.BidsDataset.dirname = self.bids_dir
+        if self.modif_file:
             self.attributes("-topmost", False)
-            messagebox.showerror('Error', self.error_str)
+            flag = messagebox.askyesno('Modify Requirements', 'Do you really want to change your requirements file?')
             self.attributes("-topmost", True)
-        else:
-            bids.BidsDataset.converters['Imaging']['path'] = self.imag_name
-            req_dict['Converters']['Imaging']['path'] = self.imag_name
-            req_dict['Converters']['Imaging']['ext'] = ['.nii']
-            bids.BidsDataset.converters['Electrophy']['path'] = self.elec_name
-            req_dict['Converters']['Electrophy']['path'] = self.elec_name
-            req_dict['Converters']['Electrophy']['ext'] = ['.vhdr', '.vmrk', '.eeg']
-            bids.BidsDataset.dirname = self.bids_dir
-            if self.modif_file:
-                self.attributes("-topmost", False)
-                flag = messagebox.askyesno('Modify Requirements', 'Do you really want to change your requirements file?')
-                self.attributes("-topmost", True)
-                if flag:
-                    req_dict.save_as_json()
-            else:
+            if flag:
                 req_dict.save_as_json()
-            self.destroy()
+        else:
+            req_dict.save_as_json()
+        self.destroy()
+        return
+
+    def del_from_list(self, flag_info=False, flag_mod=False, flag_req=False):
+        if flag_info and self.info_val_removed:
+            self.info_val_removed.sort(reverse=True)
+            for val in self.info_val_removed:
+                del self.info_value_label[val]
+                del self.info_key_label[val]
+                del self.req_button[val]
+            self.info_val_removed = []
+        if flag_mod and self.mod_removed:
+            self.mod_removed.sort(reverse=True)
+            for val in self.mod_removed:
+                del self.modality_key[val]
+                del self.modality_name[val]
+                del self.modality_value[val]
+                del self.modality_label[val]
+            self.mod_removed = []
+        if flag_req and self.mod_required_removed:
+            self.mod_required_removed.sort(reverse=True)
+            for val in self.mod_required_removed:
+                del self.modality_required_key[val]
+                del self.modality_required_name[val]
+                del self.modality_required_value[val]
+                del self.modality_required_label[val]
+            self.mod_required_removed = []
 
     def cancel(self, event=None):
         self.error_str += 'You cancel before to indicate your requirements.json.\n Bids Manager requires a requirements.json file to be operational.'
