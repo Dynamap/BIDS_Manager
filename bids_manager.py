@@ -3305,7 +3305,7 @@ def make_splash():
     return splash + ['Version ' + BidsManager.version]
 
 
-if __name__ == '__main__':
+def main():
     from time import sleep
 
     splsh = make_splash()
@@ -3337,3 +3337,6 @@ if __name__ == '__main__':
     # root.update()
     # root.deiconify()
     root.mainloop()
+
+if __name__ == '__main__':
+    main()   
