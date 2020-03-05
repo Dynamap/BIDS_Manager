@@ -1,7 +1,7 @@
 [Desktop Entry]
 Type=Application
 Name=BIDSManager
-Icon=bids_manager.ico
+Icon=/usr/local/share/icons/bids_manager.ico
 Exec=bids_manager
 Terminal=false
 Categories=Utility;Science;MedicalSoftware;

@@ -21,7 +21,7 @@ setup(
     include_package_data=True,
     data_files = [
         ('share/applications', ['bids_manager.desktop']),
-        ('share/pixmaps', ['bids_manager.ico']),
+        ('share/icons', ['bids_manager.ico']),
         ('.', ['Tutorial_BIDS_Manager.pdf']),
     ],
     entry_points={'console_scripts': ['bids_manager=bids_manager:main']},
