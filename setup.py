@@ -11,7 +11,7 @@ setup(
     description='Extract meta-data from DICOM and NIFTI files',
     author='Roehri',
     license='GPL 3.0',
-    packages=['', 'generic_uploader'],
+    packages=find_packages(),
     keywords='bids mri dicom nifti eeg ieeg',
     install_requires=[
         'QtPy',
@@ -20,9 +20,9 @@ setup(
     ],
     include_package_data=True,
     data_files = [
-        ('share/applications', ['install/usr/share/applications/bids_manager.desktop']),
-        ('share/pixmaps', ['src/bids_manager.ico']),
-        ('', ['src/Tutorial_BIDS_Manager.pdf']),
+        ('share/applications', ['bids_manager.desktop']),
+        ('share/pixmaps', ['bids_manager.ico']),
+        ('.', ['Tutorial_BIDS_Manager.pdf']),
     ],
     entry_points={'console_scripts': ['bids_manager=bids_manager:main']},
     classifiers=(

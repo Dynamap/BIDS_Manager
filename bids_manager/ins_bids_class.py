@@ -37,7 +37,7 @@ import os
 from sys import argv, modules, exc_info
 #from sys import modules
 import json
-import brainvision_hdr as bv_hdr
+import bids_manager.brainvision_hdr as bv_hdr
 from datetime import datetime
 import pprint
 import gzip

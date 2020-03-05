@@ -34,7 +34,7 @@ from builtins import dict
 from builtins import str
 from builtins import object
 from future import standard_library
-import ins_bids_class as bids
+import bids_manager.ins_bids_class as bids
 import os
 import platform
 from generic_uploader.generic_uploader import call_generic_uplader
@@ -57,7 +57,7 @@ class BidsManager(Frame, object):  # !!!!!!!!!! object is used to make the class
     bids_startfile = ''
     import_startfile = ''
 
-    def __init__(self, monitor_width, monitor_height):
+    def __init__(self, root, monitor_width, monitor_height):
         super().__init__()
         self.monitor_width = monitor_width
         self.monitor_height = monitor_height
@@ -3305,7 +3305,7 @@ def make_splash():
     return splash + ['Version ' + BidsManager.version]
 
 
-def main():
+def run_app():
     from time import sleep
 
     splsh = make_splash()
@@ -3323,7 +3323,7 @@ def main():
     width = root.winfo_screenwidth()
     height = root.winfo_screenheight()
     root.option_add("*Font", "10")
-    my_gui = BidsManager(width, height)
+    my_gui = BidsManager(root, width, height)
     root.protocol("WM_DELETE_WINDOW", my_gui.close_window)
     if not bids.BidsBrick.curr_user.lower() == 'jegou':
         if platform.system() == 'Windows':
@@ -3339,4 +3339,4 @@ def main():
     root.mainloop()
 
 if __name__ == '__main__':
-    main()   
+    run_app()   

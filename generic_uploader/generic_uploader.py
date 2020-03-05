@@ -40,7 +40,7 @@ from generic_uploader.read_seeg_images_header import read_headers
 from generic_uploader.anonymizeDicom import anonymize as anonymize_dcm
 # import pysftp
 # import paramiko
-import ins_bids_class
+import bids_manager.ins_bids_class
 from generic_uploader import patient_requirements_class
 from generic_uploader.modality_gui import ModalityGui
 from generic_uploader.import_by_modality import import_by_modality
