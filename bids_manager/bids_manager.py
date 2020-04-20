@@ -23,41 +23,33 @@
 #     Authors: Nicolas Roehri, 2018-2019
 #              Aude Jegou, 2019-2020
 
-from __future__ import division
-from __future__ import print_function
-from __future__ import unicode_literals
-from __future__ import absolute_import
-from builtins import super
-from builtins import round
-from builtins import range
-from builtins import dict
-from builtins import str
-from builtins import object
-from future import standard_library
-import ins_bids_class as bids
+import bids_manager.ins_bids_class as bids
+from bids_pipeline import pipeline_class as pip
 import os
+import json
 import platform
 from generic_uploader.generic_uploader import call_generic_uplader
 from tkinter import ttk, Tk, Menu, messagebox, filedialog, Frame, Listbox, scrolledtext, Toplevel, \
-    Label, Button, Entry, StringVar, IntVar, DISABLED, NORMAL, END, W, N, E, BOTH, X, Y, RIGHT, LEFT,\
+    Label, Button, Entry, StringVar, BooleanVar, IntVar, DISABLED, NORMAL, END, W, N, E, BOTH, X, Y, RIGHT, LEFT,\
     TOP, BOTTOM, BROWSE, MULTIPLE, EXTENDED, ACTIVE, RIDGE, Scrollbar, CENTER, OptionMenu, Checkbutton, Radiobutton, GROOVE, \
-    Canvas, font
+    Variable, Canvas, font
+from bids_pipeline.convert_process_file import write_big_table
 try:
     from importlib import reload
 except:
     pass
-standard_library.install_aliases()
 
 
 class BidsManager(Frame, object):  # !!!!!!!!!! object is used to make the class Py2 compatible
     # (https://stackoverflow.com/questions/18171328/python-2-7-super-error) While it is true that Tkinter uses
     # old-style classes, this limitation can be overcome by additionally deriving the subclass Application from object
     # (using Python multiple inheritance) !!!!!!!!!
-    version = '0.2.5'
-    bids_startfile = ''
-    import_startfile = ''
+    version = '0.2.6'
+    bids_startfile = os.path.join(os.getcwd(), 'Data')
+    import_startfile = os.path.join(os.getcwd(), 'Data')
+    folder_software = os.path.join(os.getcwd(), 'SoftwarePipeline')
 
-    def __init__(self, monitor_width, monitor_height):
+    def __init__(self, root, monitor_width, monitor_height):
         super().__init__()
         self.monitor_width = monitor_width
         self.monitor_height = monitor_height
@@ -72,9 +64,10 @@ class BidsManager(Frame, object):  # !!!!!!!!!! object is used to make the class
         self.bids_dir = None
         self.upload_dir = None
         self.main_frame = dict()
+        self.root = root
         # make menu
         menu_bar = Menu(self.master)
-        root['menu'] = menu_bar
+        self.root['menu'] = menu_bar
         # settings menu
         bids_menu = Menu(menu_bar, tearoff=0)
         self.bids_menu = bids_menu
@@ -86,8 +79,10 @@ class BidsManager(Frame, object):  # !!!!!!!!!! object is used to make the class
         self.issue_menu = issue_menu
         about_menu = Menu(menu_bar, tearoff=0)
         self.about_menu = about_menu
-        # pipeline_menu = Menu(menu_bar, tearoff=0)
-        # self.pipeline_menu = pipeline_menu
+        pipeline_menu = Menu(menu_bar, tearoff=0)
+        self.pipeline_menu = pipeline_menu
+        statistic_menu = Menu(menu_bar, tearoff=0)
+        self.statistic_menu = statistic_menu
         # fill up the bids menu
         bids_menu.add_command(label='Create new BIDS directory', command=lambda: self.ask4bidsdir(True))
         bids_menu.add_command(label='Set BIDS directory', command=self.ask4bidsdir)
@@ -97,10 +92,12 @@ class BidsManager(Frame, object):  # !!!!!!!!!! object is used to make the class
         bids_menu.add_command(label='Show previous logs', command=lambda: self.show_logs(all=True), state=DISABLED)
         bids_menu.add_command(label='Show dataset_description.json', state=DISABLED)
         bids_menu.add_command(label='Explore Bids dataset', state=DISABLED)
+        bids_menu.add_command(label='Determine subject by criteria subject', command=lambda: self.subject_selection(), state=DISABLED)
         bids_menu.add_command(label='Modify requirements file', command=self.modify_requirements_file, state=DISABLED)
         # fill up the upload/import menu
         uploader_menu.add_command(label='Import data with BIDS Uploader', command=self.ask4uploader_import, state=DISABLED)
         uploader_menu.add_command(label='Set Upload directory', command=self.ask4upload_dir, state=DISABLED)
+        uploader_menu.add_command(label='Create template data2import', command=self.create_data2import_template, state=DISABLED)
         uploader_menu.add_command(label='Add elements to import', command=self.add_elmt2data2import, state=DISABLED)
         uploader_menu.add_command(label='Import', command=self.import_data, state=DISABLED)
         # fill up the issue menu
@@ -110,20 +107,28 @@ class BidsManager(Frame, object):  # !!!!!!!!!! object is used to make the class
                                command=lambda: self.solve_issues('ImportIssue'), state=DISABLED)
         issue_menu.add_command(label='Solve channel issues',
                                command=lambda: self.solve_issues('ElectrodeIssue'), state=DISABLED)
-        # fill up the about menu
+        issue_menu.add_command(label='Solve bids-validator issues',
+                               command=lambda: self.solve_issues('ValidatorIssue'), state=DISABLED)
+        #fill up the about menu
         about_menu.add_command(label='License', command=self.read_license)
         about_menu.add_command(label='How to cite the paper', command=self.cite_paper)
         # fill up the pipeline menu
-        # self.pipeline_settings = bids.PipelineSettings()
-        # self.pipeline_settings.read_file()
-        # for cnt, pipl in enumerate(self.pipeline_settings['Settings']):
-        #     pipeline_menu.add_command(label=pipl['label'], command=lambda idx=cnt:
-        # self.launch_pipeline(idx), state=DISABLED)
-        # settings_menu.add_command(label='Exit', command=self.quit)
+
+        with os.scandir(self.folder_software) as it:
+            for entry in it:
+                name, ext = os.path.splitext(entry.name)
+                if ext == '.json':
+                    pipeline_menu.add_command(label=name, command=lambda nm=name: self.run_analysis(nm), state=DISABLED)
+        pipeline_menu.add_command(label='Create processing batch', command=lambda nm='batch': self.run_analysis(nm), state=DISABLED)
+        pipeline_menu.add_command(label='Upload batch file or analysis file', command=lambda: self.select_batch_file(), state=DISABLED)
+
+        #sattistic menu
+        statistic_menu.add_command(label='Create statistic table', command= lambda: self.createtablestats(), state=DISABLED)
         menu_bar.add_cascade(label="BIDS", underline=0, menu=bids_menu)
         menu_bar.add_cascade(label="Uploader", underline=0, menu=uploader_menu)
         menu_bar.add_cascade(label="Issues", underline=0, menu=issue_menu)
-        # menu_bar.add_cascade(label="Pipelines", underline=0, menu=pipeline_menu)
+        menu_bar.add_cascade(label="Pipelines", underline=0, menu=pipeline_menu)
+        menu_bar.add_cascade(label="Statistics", underline=0, menu=statistic_menu)
         menu_bar.add_cascade(label='About', underline=0, menu=about_menu)
 
         # area to print logs
@@ -144,11 +149,11 @@ class BidsManager(Frame, object):  # !!!!!!!!!! object is used to make the class
         # self.pack_element(self.main_frame['text'])
         # self.update_text('\n'.join(make_splash()))
 
-    def launch_pipeline(self, idx):
-        pass
-        # self.pipeline_settings.propose_param(self.curr_bids, idx)
-        # self.curr_bids.write_log('Launching: ' + self.pipeline_settings['Settings'][idx]['label']
-        #  + '(to be set!!!!!)')
+    # def launch_pipeline(self, idx):
+    #     pass
+    #     # self.pipeline_settings.propose_param(self.curr_bids, idx)
+    #     # self.curr_bids.write_log('Launching: ' + self.pipeline_settings['Settings'][idx]['label']
+    #     #  + '(to be set!!!!!)')
 
     def pack_element(self, element, side=None, remove_previous=True):
 
@@ -225,7 +230,7 @@ class BidsManager(Frame, object):  # !!!!!!!!!! object is used to make the class
     def add_elmt2data2import(self):
         self.curr_data2import._assign_import_dir(self.curr_data2import.dirname)
         self.curr_data2import.save_as_json(write_date=True)
-        results = BidsBrickDialog(root, self.curr_data2import,
+        results = BidsBrickDialog(self.root, self.curr_data2import,
                                   disabled=self.curr_data2import['DatasetDescJSON'].keylist,
                                   title=self.curr_data2import.classname()).apply()
         if results is not None and messagebox.askyesno('Change ' + self.curr_data2import.classname() + '?',
@@ -275,14 +280,14 @@ class BidsManager(Frame, object):  # !!!!!!!!!! object is used to make the class
     def show_bids_desc(self, input_dict):
 
         if isinstance(input_dict, bids.BidsBrick):
-            output_dict = FormDialog(root, input_dict,
+            output_dict = FormDialog(self.root, input_dict,
                                      required_keys=input_dict.required_keys,
                                      title='Fill up the ' + input_dict.__class__.__name__ + 'attributes').apply()
         elif isinstance(input_dict, bids.DatasetDescJSON):
             messagebox.showwarning('Warning !!', 'If you change the Name of the dataset, it will change the anonymisation key!')
             temp_dict = input_dict.__class__()
             temp_dict.copy_values(input_dict, simplify_flag=False)
-            output_dict = FormDialog(root, temp_dict,
+            output_dict = FormDialog(self.root, temp_dict,
                                      required_keys=input_dict.required_keys,
                                      title='Fill up the ' + input_dict.__class__.filename).apply()
             if output_dict:
@@ -324,7 +329,7 @@ class BidsManager(Frame, object):  # !!!!!!!!!! object is used to make the class
                 return error_str
             # create a dataset description file
             datasetdesc = bids.DatasetDescJSON()
-            output_dict = FormDialog(root, datasetdesc,
+            output_dict = FormDialog(self.root, datasetdesc,
                                      required_keys=bids.DatasetDescJSON.required_keys,
                                      title='Fill up the ' + bids.DatasetDescJSON.filename).apply()
             if output_dict:
@@ -410,14 +415,16 @@ class BidsManager(Frame, object):  # !!!!!!!!!! object is used to make the class
         self.curr_bids.get_requirements()
         # enable all bids sub-menu
         self.change_menu_state(self.bids_menu)
+        self.change_menu_state(self.pipeline_menu)
         self.bids_menu.entryconfigure(5, command=lambda: self.show_bids_desc(self.curr_bids['DatasetDescJSON']))
         self.bids_menu.entryconfigure(6, command=self.explore_bids_dataset)
         # enable selection of upload directory
-        self.change_menu_state(self.uploader_menu, end_idx=1)
+        self.change_menu_state(self.uploader_menu, end_idx=2)
         # enable all issue sub-menu
         self.change_menu_state(self.issue_menu)
         # enalbe all pipelines
-        #self.change_menu_state(self.pipeline_menu)
+        self.change_menu_state(self.pipeline_menu)
+        self.change_menu_state(self.statistic_menu)
         # self.update_text(self.curr_bids.curr_log)
         self.make_available()
 
@@ -452,13 +459,9 @@ class BidsManager(Frame, object):  # !!!!!!!!!! object is used to make the class
                 self.update_text('Error: data2import.json not found in ' + self.upload_dir)
                 self.upload_dir = None
                 self.curr_data2import = None
-                self.change_menu_state(self.uploader_menu, state=DISABLED, start_idx=1)
+                self.change_menu_state(self.uploader_menu, state=DISABLED, start_idx=2)
 
         except Exception as err:
-            # exc_type, exc_obj, exc_tb = exc_info()
-            # err_name = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-            # self.write_log('Error type: ' + str(exc_type) + ', scriptname: ' + err_name + ', line number, ' + str(
-            #     exc_tb.tb_lineno) + ': ' + str(err))
             self.update_text(str(err))
         self.make_available()
 
@@ -617,6 +620,19 @@ class BidsManager(Frame, object):  # !!!!!!!!!! object is used to make the class
         info['IsAction'] = True
         self.update_issue_list(curr_dict, list_idx, info)
 
+    def add_elt_bidsignore(self, list_idx, info):
+        input_dict = {'type': ''}
+        opt_dict = {'type': bids.ValidatorIssue.possibility}
+        curr_iss = self.curr_bids.issues['ValidatorIssue'][info['index']]
+        output_dict = FormDialog(self, input_dict, title='What part of the file would you like to add to bidsignore?',
+                                 options=opt_dict).apply()
+        if output_dict:
+            str_info = 'The ' + output_dict['type'] + ' of ' + curr_iss['fileLoc'] + ' will be added to bidsignore.\n'
+            command = 'type="' + output_dict['type'] + '"'
+            curr_iss.add_action(str_info, command)
+            info['IsAction'] = True
+            self.update_issue_list(curr_iss, list_idx, info)
+
     def solve_issues(self, issue_key):
 
         def what2domenu(iss_key, dlb_lst, line_map, event, deriv_issue=None):
@@ -634,6 +650,11 @@ class BidsManager(Frame, object):  # !!!!!!!!!! object is used to make the class
                                      command=lambda: self.select_correct_name(curr_idx, line_map[curr_idx]))
                 pop_menu.add_command(label='Change electrode type',
                                      command=lambda: self.change_elec_type(curr_idx, line_map[curr_idx]))
+            elif iss_key == 'ValidatorIssue':
+                pop_menu.add_command(label='Open file',
+                                     command=lambda: self.open_file(issue_key, curr_idx, line_map[curr_idx]))
+                pop_menu.add_command(label='Add elements to bidsignore',
+                                     command=lambda: self.add_elt_bidsignore(curr_idx, line_map[curr_idx]))
             else:
                 if isinstance(line_map[curr_idx]['Element'], bids.DatasetDescJSON):
                     # if issue arise from DatasetDescJSON change the DatasetDescJSON object in data2import.json
@@ -748,6 +769,19 @@ class BidsManager(Frame, object):  # !!!!!!!!!! object is used to make the class
                     line_mapping[-1]['IsAction'] = True
                 else:
                     action_list2write.append('')
+        elif issue_key == 'ValidatorIssue':
+            label_str = 'bids-validator issue'
+            for issue in issue_dict:
+                line_mapping.append({'index': issue_dict.index(issue),
+                                 'IsComment': bool(issue.formatting(comment_type='Comment')),
+                                 'IsAction': False})
+                issue_list2write.append(issue['description'])
+                act_str = issue.formatting(comment_type='Action')
+
+                if act_str:
+                    action_list2write.append(act_str[0])
+                    # you can write act_str[0] because there is only one action per channel
+                    line_mapping[-1]['IsAction'] = True
         else:
             messagebox.showerror('Unknown issue', 'This issue is currently not recognize')
             return
@@ -780,7 +814,7 @@ class BidsManager(Frame, object):  # !!!!!!!!!! object is used to make the class
             self.update_text(self.curr_bids.curr_log + str(err))
         self.curr_data2import = None
         self.upload_dir = None
-        self.change_menu_state(self.uploader_menu, start_idx=2, state=DISABLED)
+        self.change_menu_state(self.uploader_menu, start_idx=3, state=DISABLED)
         self.make_available()
 
     def close_window(self):
@@ -792,14 +826,14 @@ class BidsManager(Frame, object):  # !!!!!!!!!! object is used to make the class
             self.curr_bids.write_log('BIDS Manager was closed')
             self.curr_bids.save_as_json()
         self.quit()
-        root.destroy()
+        self.root.destroy()
 
     def make_idle(self, str2print=None):
         if str2print is None:
             str2print = ''
         else:
             str2print = '\n' + str2print
-        root.config(cursor="wait")
+        self.root.config(cursor="wait")
         for key in self.main_frame:
             self.main_frame[key].config(cursor="wait")
         self.banner.configure(bg="red")
@@ -807,7 +841,7 @@ class BidsManager(Frame, object):  # !!!!!!!!!! object is used to make the class
         self.update()
 
     def make_available(self):
-        root.config(cursor="")
+        self.root.config(cursor="")
         for key in self.main_frame:
             self.main_frame[key].config(cursor="")
         self.banner.configure(bg="blue")
@@ -884,6 +918,41 @@ class BidsManager(Frame, object):  # !!!!!!!!!! object is used to make the class
             RequirementsDialog(self, self.curr_bids.dirname, filename)
             self.curr_bids.requirements = bids.Requirements(filename)
 
+    def create_data2import_template(self):
+        import_dir = filedialog.askdirectory(title='Select the import folder', initialdir=self.curr_bids.dirname)
+        if not import_dir:
+            messagebox.showerror('ERROR', 'An import folder have to be selected !')
+            return
+        else:
+            results = Data2ImportTemplate(self).results
+            data2import = bids.Data2Import(import_dir, os.path.join(self.curr_bids.dirname, 'Code', 'requirements.json'))
+            data2import['DatasetDescJSON'] = self.curr_bids['DatasetDescJSON']
+            if len(data2import['Derivatives']) < 1:
+                data2import['Derivatives'] = bids.Derivatives()
+            if results:
+                for elt in results['subject']:
+                    sub = bids.Subject()
+                    sub['sub'] = elt['name']
+                    for mod in elt['modality']:
+                        if 'Process' in mod:
+                            mod = mod.replace('Process', '')
+                        sub[mod] = eval('bids.'+mod+'()')
+                        sub[mod][-1]['sub'] = elt['name']
+                    data2import['Subject'].append(sub)
+                for elt in results['derivatives']:
+                    pip = bids.Pipeline()
+                    pip['name'] = elt['name']
+                    sub = bids.SubjectProcess()
+                    for mod in elt['modality']:
+                        stemp = ''
+                        if 'Process' not in mod:
+                            stemp = 'Process'
+                        sub[mod+stemp] = eval('bids.'+mod+stemp+'()')
+                    pip['SubjectProcess'].append(sub)
+                    data2import['Derivatives'][-1]['Pipeline'].append(pip)
+            data2import.save_as_json()
+            self.update_text('The data2import template has been created.\n')
+
     def read_license(self):
         notice_license = 'BIDS Manager  Copyright (C) 2018-2020  Aix-Marseille University, INSERM, INS.\n' \
         'This program is free software: you can redistribute it and/or modify it under the terms of the\n' \
@@ -900,24 +969,105 @@ class BidsManager(Frame, object):  # !!!!!!!!!! object is used to make the class
                     '(submitted)'
         messagebox.showinfo('Citation', citation)
 
+    def run_analysis(self, nameS, batch_file=None):
+        if nameS == 'batch':
+            output_dict = BidsSelectDialog(self, self.curr_bids, analysis_dict=nameS, batch_file=batch_file)
+            if output_dict.log_error:
+                self.update_text(output_dict.log_error)
+                self.make_available()
+                return
+            #save batch and possibility to upload it in the GUI
+            #add verif on subject selected for the different batch
+            # self.update_text('Subjects selected \n' + '\n'.join(
+            #     output_dict.results[nameS]['subject_selected']) + '\nThe analysis is ready to be run')
+            self.make_idle('Analysis in process')
+            last_out = {i: '' for i, key in enumerate(output_dict.results)}
+            batch_file = {key: {} for key in output_dict.results}
+            for ind, key in enumerate(output_dict.results):
+                soft_analyse = pip.PipelineSetting(self.curr_bids, key)
+                for clef in output_dict.results[key]['input_param']:
+                    if 'deriv-folder' in output_dict.results[key]['input_param'][clef] and 'Previous analysis results' in output_dict.results[key]['input_param'][clef]['deriv-folder'][0]:
+                        idx_prev = int(output_dict.results[key]['input_param'][clef]['deriv-folder'][0].split('-')[0]) - 1
+                        if idx_prev in last_out and last_out[idx_prev] != '':
+                            output_dict.results[key]['input_param'][clef]['deriv-folder'][0] = last_out[idx_prev]
+                        else:
+                            messagebox.showerror('Selection error', 'There is no analysis before {}.\n'.format(key))
+                            output_dict = BidsSelectDialog(self, self.curr_bids, analysis_dict=nameS)
+                            # remettre le batch
+                            self.make_available()
+                            return
+                log_analysis, output_name, batch_file_soft = soft_analyse.set_everything_for_analysis(output_dict.results[key])
+                self.curr_bids.write_log('{} analysis:\n'.format(key) + log_analysis)
+                last_out[ind] = output_name
+                batch_file[key] = batch_file_soft
+            pip.save_batch(self.curr_bids.dirname, batch_file)
+        else:
+            try:
+                soft_analyse = pip.PipelineSetting(self.curr_bids, nameS)
+            except (EOFError, KeyError) as err:
+                if isinstance(err, KeyError):
+                    err = 'The error comes from the key ' + err.args[0] + ' in your json.'
+                self.update_text(str(err))
+                self.make_available()
+                return
+            output_dict = BidsSelectDialog(self, self.curr_bids, analysis_dict=soft_analyse)
+            if output_dict.log_error:
+                self.update_text(output_dict.log_error)
+                self.make_available()
+                return
+                # verify modality is present with one value
+            clef = [key for key in output_dict.results][0]
+            #add the parameters
+            self.update_text('Subjects selected \n' + '\n'.join(output_dict.results[clef]['subject_selected']) + '\nThe analysis is ready to be run')
+            self.make_idle('Analysis in process')
+            log_analysis, output_name, batch_file_soft = soft_analyse.set_everything_for_analysis(output_dict.results[clef]) #['analysis_param'], output_dict.results['subject_selected'], output_dict.reults['input_param']
+            #self.update_text(log_analysis)
+            self.curr_bids.write_log(log_analysis)
+        self.make_available()
 
-    # def run_analysis(self, nameS):
-    #     try:
-    #         soft_analyse = pip.PipelineSetting(self.curr_bids, nameS)
-    #     except (EOFError, KeyError) as err:
-    #         self.update_text(err)
-    #         #self.ask4bidsdir(isnew_dir=False)
-    #     output_dict = BidsSelectDialog(self, self.curr_bids, soft_analyse)
-    #     #add the parameters
-    #     self.update_text('Subjects selected \n' + '\n'.join(output_dict.subject_selected['sub']) + '\nThe analysis is ready to be run')
-    #     log_analysis = soft_analyse.set_everything_for_analysis(output_dict.analysis_param, output_dict.subject_selected)
-    #     self.update_text(log_analysis)
+    def select_batch_file(self):
+        if os.path.exists(os.path.join(bids.BidsBrick.cwdir, 'derivatives', 'bids_pipeline', 'batch')):
+            init_dir = os.path.join(bids.BidsBrick.cwdir, 'derivatives', 'bids_pipeline', 'batch')
+        elif os.path.exists(os.path.join(bids.BidsBrick.cwdir, 'derivatives', 'bids_pipeline')):
+            init_dir = os.path.join(bids.BidsBrick.cwdir, 'derivatives', 'bids_pipeline')
+        elif os.path.exists(os.path.join(bids.BidsBrick.cwdir, 'derivatives')):
+            init_dir = os.path.join(bids.BidsBrick.cwdir, 'derivatives')
+        else:
+            init_dir = bids.BidsBrick.cwdir
+        fname = filedialog.askopenfilename(title='Please select a batch file',
+                                           filetypes=[('batch', "*.json")],
+                                           initialdir=init_dir)
+        self.run_analysis('batch', batch_file=fname)
+
+    def subject_selection(self):
+        output_dict = BidsSelectDialog(self, self.curr_bids)
+        if 'subject_selected' in output_dict.results:
+            self.update_text('Subjects corresponding to the selection are:\n' + '\n'.join(
+            output_dict.results['subject_selected']))
 
     def createtablestats(self):
+        self.make_idle('Create your statistical table')
+        select_list = None
         deriv_dir = os.path.join(self.curr_bids.dirname, 'derivatives')
-        select_list = TableForStatsDialog(self, deriv_dir)
-        type_select = SelectHowToCreateTable(self, select_list.results)
-        print('coucou')
+        reject_dir = ['parsing', 'log', 'parsing_old', 'log_old', 'bids_pipeline']
+        deriv_list = [entry for entry in os.listdir(deriv_dir) if
+                           not os.path.isfile(os.path.join(deriv_dir, entry)) and not entry in reject_dir]
+        multi_soft = [fold.split('-')[0] for fold in deriv_list if '-v' in fold]
+        multi_soft = list(set(multi_soft))
+        if multi_soft:
+            select_list = HandleMultipleSameProcess(self, deriv_list, multi_soft).results
+        try:
+            log_error = write_big_table(deriv_dir, select_list)
+            if log_error:
+                self.update_text(log_error)
+            else:
+                self.update_text('The statistical table has been created with no error.\n')
+            self.make_available()
+            return
+        except ValueError as err:
+            messagebox.showerror('ERROR', err)
+            self.make_available()
+            return
 
     @staticmethod
     def make_table(table):
@@ -1655,7 +1805,11 @@ class BidsBrickDialog(FormDialog):
         self.main_form(parent)
         cnt_tot = len(self.input_dict)
         # remember input_dict corresponds only to the attributes
-        #Pour changer la visualisation des fichiers present dans les modalite
+        if any(key in bids.ModalityType.get_list_subclasses_names() for key in self.key_button_lbl):
+            VertFrame = VerticalScrollbarFrame(parent, grid_row=1)
+            body_frame = VertFrame.frame
+        else:
+            body_frame = parent
         for cnt, key in enumerate(self.key_button_lbl.keys()):
             if not self.meta_brick == 'Data2Import':
                 if key not in bids.BidsSidecar.get_list_subclasses_names() and not self.main_brick[key]:
@@ -1672,19 +1826,25 @@ class BidsBrickDialog(FormDialog):
             #     setting_list['rowspan'] = 6
             #     setting_label['rowspan'] = 6
             #     cnt_tot += setting_list['rowspan'] - 1
-            self.key_button_lbl[key] = Label(parent, text=key, fg="black")
+            self.key_button_lbl[key] = Label(body_frame, text=key, fg="black")
             self.key_button_lbl[key].grid(**setting_label)
-            if key == 'Subject':
+            if key.startswith('Subject'):
                 ht = 8
+                wd = 20
             elif key in bids.BidsSidecar.get_list_subclasses_names():
                 ht = 1
+                wd = 20
             else:
                 ht = 3
+                wd = 40
             if isinstance(self.main_brick, (bids.ModalityType, bids.GlobalSidecars)):
                 setting_list['columnspan'] = 1
-            self.key_listw[key] = Listbox(parent, height=ht) #Voir si modifie cela
-            self.key_listw[key].bind('<Double-Button-1>', lambda event, k=key: self.open_new_window(k, event))
-            self.key_listw[key].bind('<Return>', lambda event, k=key: self.open_new_window(k, event))
+            self.key_listw[key] = Listbox(body_frame, height=ht, width=wd) #Voir si modifie cela
+            if not (key.startswith('Subject') or key == 'Derivatives') or (key not in self.key_disabled or not self.key_disabled[key] == DISABLED):
+                self.key_listw[key].bind('<Double-Button-1>', lambda event, k=key: self.open_new_window(k, event))
+                self.key_listw[key].bind('<Return>', lambda event, k=key: self.open_new_window(k, event))
+            else:
+                self.key_listw[key].bind('<Double-Button-1>', lambda event, k=key: self.call_menu(k, event))
             self.populate_list(self.key_listw[key], self.main_brick[key])
             self.key_listw[key].grid(**setting_list)
 
@@ -1697,7 +1857,7 @@ class BidsBrickDialog(FormDialog):
                     btn_str = 'Set '
                 else:
                     btn_str = 'Add '
-                self.key_button[key] = Button(parent, text=btn_str + key, justify=CENTER,
+                self.key_button[key] = Button(body_frame, text=btn_str + key, justify=CENTER,
                                               command=lambda k=key: self.add_new_brick(k))
                 self.key_button[key].grid(row=cnt+cnt_tot, column=3, sticky=W+E, padx=self.default_pad[0],
                                           pady=self.default_pad[1])
@@ -1706,6 +1866,16 @@ class BidsBrickDialog(FormDialog):
             for i in range(self.body_widget.grid_size()[0]):
                 self.body_widget.grid_columnconfigure(i, weight=1, uniform='test')
         self.results = self.input_dict
+        if 'VertFrame' in locals():
+            VertFrame.update_scrollbar()
+            if 'btn_str' in locals():
+                self.body_widget.grid_columnconfigure(1, weight=5, uniform='test')
+
+    def call_menu(self, key, event):
+        pop_menu = Menu(self.key_listw[key], tearoff=0)
+        pop_menu.add_command(label='Show {}'.format(key), command=lambda ev=event, k=key: self.open_new_window(k, ev))
+        pop_menu.add_command(label='Delete {}'.format(key), command=lambda k=key: self.remove_element(k))
+        pop_menu.post(event.x_root, event.y_root)
 
     @staticmethod
     def populate_list(list_obj, list_of_bbricks):
@@ -1757,6 +1927,7 @@ class BidsBrickDialog(FormDialog):
                 disabl = None
             BidsBrickDialog(self, pip, disabled=disabl,
                             title=pip.classname() + ': ' + pip['name'], flag_process=True, addelements=addelements)
+            self.main_brick.save_as_json()
         elif key == 'Scans':
             sdcr_file = self.main_brick['Scans'][curr_idx]['ScansTSV']
             title=None
@@ -1824,7 +1995,6 @@ class BidsBrickDialog(FormDialog):
         else:
             os.startfile(os.path.normpath(os.path.join(bids.BidsBrick.cwdir, fname)))
 
-
     def remove_file(self, mod_brick, key, index):
         if BidsBrickDialog.meta_brick == 'BidsDataset' and \
                 messagebox.askyesno('Remove File', 'Are you sure you want to remove ' + mod_brick['fileLoc'] + '?'):
@@ -1834,8 +2004,26 @@ class BidsBrickDialog(FormDialog):
             self.populate_list(self.key_listw[key], self.main_brick[key])
             self.config(cursor="")
 
-    # def remove_element(self, key, index):
-    #     self.populate_list(self.key_listw[key], self.main_brick[key])
+    def remove_element(self, key):
+        in_deriv = None
+        if not self.key_listw[key].curselection():
+            return
+        curr_idx = self.key_listw[key].curselection()[0]
+        if key == 'Derivatives':
+            input_dict = self.main_brick[key][0]['Pipeline'][curr_idx]
+            to_display = input_dict['name']
+        else:
+            input_dict = self.main_brick[key][curr_idx]
+            to_display = input_dict['sub']
+        if key == 'SubjectProcess':
+            in_deriv = self.main_brick['name']
+            to_display += ' in '+ in_deriv + 'folder'
+        if (BidsBrickDialog.meta_brick == 'BidsDataset' or BidsBrickDialog.meta_brick == 'Pipeline') and \
+            messagebox.askyesno('Remove {}'.format(key), 'Are you sure you want to remove ' + to_display + ' from the dataset?'):
+            self.config(cursor="wait")
+            BidsBrickDialog.bidsdataset.remove(input_dict, in_deriv=in_deriv)
+            self.populate_list(self.key_listw[key], self.main_brick[key])
+            self.config(cursor="")
 
     def add_new_brick(self, key):
         self.update_fields()
@@ -2108,7 +2296,7 @@ def make_cmd4chg_attr(curr_issue, elmt_brick, input_dict, modif_brick, in_bids_f
 def prepare_chg_eletype(curr_iss, mismtch_elec):
     input_dict = {'type': mism_elec['type'] for mism_elec in curr_iss['MismatchedElectrodes']
                   if mism_elec['name'] == mismtch_elec}
-    opt_dict = {'type': bids.Electrophy.channel_type}
+    opt_dict = {'type': eval('bids.'+ curr_iss['mod'] +'.channel_type')}
 
     return input_dict, opt_dict
 
@@ -2131,384 +2319,439 @@ def make_cmd4elecnamechg(new_name, curr_iss, mismtch_elec):
             curr_iss.add_action(str_info, command, elec_name=mismtch_elec)
 
 
-# class BidsSelectDialog(TemplateDialog):
-#     bidsdataset = None
-#     select_subject = None
-#     #subject_list = {'SubjectToAnalyse': []}
-#
-#     def __init__(self, parent, input_dict, analysis_dict):
-#
-#         if isinstance(input_dict, bids.BidsDataset):
-#             BidsSelectDialog.bidsdataset = input_dict
-#         elif analysis_dict and not isinstance(analysis_dict, pip.PipelineSetting):
-#             raise TypeError('Third input should be a pipeline analysis')
-#         else:
-#             raise TypeError('Second input should be a bids dataset')
-#
-#         #init variable
-#         self.subject_dict =dict()
-#
-#         self.participants = BidsSelectDialog.bidsdataset['ParticipantsTSV']
-#         self.vars = self.select_criteria(self.participants)
-#
-#         self.subject_dict['Subject'] = []
-#         for sub in BidsSelectDialog.bidsdataset['Subject']:
-#             self.subject_dict['Subject'].append(sub['sub'])
-#
-#         self.software = analysis_dict
-#         try:
-#             self.param_vars, self.input_vars = self.software.create_parameter_to_inform()
-#             self.param_script = IntVar()
-#             self.param_gui = IntVar()
-#             self.param_file = []
-#         except EOFError as err:
-#             messagebox.showerror('ERROR', err)
-#             return
-#
-#         if self.input_vars:
-#             req_keys = [key for key in pip.SubjectToAnalyse.keylist if not key == 'sub']
-#             for clef in self.input_vars:
-#                 if self.input_vars[clef]['modality']['attribut'] == 'Label':
-#                     modality = [self.input_vars[clef]['modality']['value']]
-#                 else:
-#                     modality = self.input_vars[clef]['modality']['value']
-#                 for sub in BidsSelectDialog.bidsdataset['Subject']:
-#                     for mod in sub:
-#                         if mod and mod in modality:
-#                             keys = [elt for elt in req_keys if elt in eval('bids.'+mod+'.keylist')]
-#                             if mod in bids.Imaging.get_list_subclasses_names():
-#                                 keys.append('modality')
-#                             for key in keys:
-#                                 value = [elt[key] for elt in sub[mod]]
-#                                 value = sorted(list(set(value)))
-#                                 if value and value[0] is not '':
-#                                     if not key in self.input_vars[clef]:
-#                                         self.input_vars[clef][key] = {}
-#                                         self.input_vars[clef][key]['value'] = value
-#                                         self.input_vars[clef][key]['attribut'] = 'IntVar'
-#                                     elif key == 'modality' and self.input_vars[clef][key]['attribut'] == 'Label':
-#                                         self.input_vars[clef][key]['value'] = value
-#                                         self.input_vars[clef][key]['attribut'] = 'IntVar'
-#                                     else:
-#                                         self.input_vars[clef][key]['value'].extend(value)
-#                                     self.input_vars[clef][key]['value'] = sorted(list(set(self.input_vars[clef][key]['value'])))
-#                                     if len(self.input_vars[clef][key]['value']) > 1:
-#                                         self.input_vars[clef][key]['attribut'] = 'Variable'
-#
-#         super().__init__(parent)
-#
-#     def body(self, parent):
-#
-#         self.title('Select Subjects and parameters')
-#         self.All_sub = IntVar()
-#         self.Id_sub = IntVar()
-#         self.Crit_sub = IntVar()
-#         frame_subject = Frame(parent,  relief=GROOVE, borderwidth=2)
-#         Label(frame_subject, text='Select subjects for analysis', font='bold', fg='#1F618D').pack(side=TOP)
-#         frame_subject.pack(side=LEFT)
-#         frame_sub_check = Frame(frame_subject)
-#         All_sub_butt = Checkbutton(frame_sub_check, text='All subjects', variable=self.All_sub)
-#         All_sub_butt.pack(side=LEFT)
-#         Id_sub_butt = Checkbutton(frame_sub_check, text='Select subject(s) Id(s)', variable=self.Id_sub, command=lambda: enable_frames(Frame_list, self.Id_sub))
-#         Id_sub_butt.pack(side=LEFT)
-#         Crit_sub_butt = Checkbutton(frame_sub_check, text='Select subjects by criteria', variable=self.Crit_sub, command=lambda: enable_frames(Frame_criteria, self.Crit_sub))
-#         Crit_sub_butt.pack(side=LEFT)
-#         Frame_list = Frame(frame_subject)
-#         Frame_criteria = Frame(frame_subject)
-#         Label(Frame_criteria, text='Select criteria for multiple subjects analysis:', font='bold', fg='#1F618D').grid(row=0)
-#
-#         #Subject list
-#         self.subject = Label(Frame_list, text='Subject', font='bold', fg='#1F618D')
-#         self.subject.grid(row=0, sticky=W)
-#         list_choice = Variable(Frame_list, self.subject_dict['Subject'])
-#         self.select_subject = Listbox(Frame_list, exportselection=0, listvariable=list_choice, selectmode=MULTIPLE)
-#         self.select_subject.grid(row=1, column=1, sticky=W + E)
-#
-#         #Criteria to select subjects
-#         max_crit, cntC = self.create_button(Frame_criteria, self.vars)
-#
-#         #place the frame
-#         if cntC < 1:
-#             cntC = 1
-#         frame_sub_check.pack(side=TOP)
-#         Frame_list.pack(side=LEFT)#.grid(row=1, column=0, columnspan=1, rowspan=cntR + cntC)
-#         enable(Frame_list, 'disabled')
-#         Frame_criteria.pack(side=LEFT)#.grid(row=cntR+1, column=1, rowspan=cntC, columnspan=max_crit)
-#         enable(Frame_criteria, 'disabled')
-#         frame_subject.pack(side=LEFT)
-#
-#         frame_parameters = Frame(parent, relief=GROOVE, borderwidth=2)
-#         if self.input_vars:
-#             frame_input_criteria = Frame(frame_parameters)
-#             Label(frame_input_criteria, text='Select input criteria:', font='bold', fg='#1F618D').pack()
-#             frame_dict= dict()
-#             for cnt, key in enumerate(self.input_vars):
-#                 frame_dict[key] = Frame(frame_input_criteria)
-#                 Label(frame_dict[key], text='{0}'.format(' '.join(key.split('_')[1:]))).grid(row=0)
-#                 max_req, cntR = self.create_button(frame_dict[key], self.input_vars[key])
-#                 frame_dict[key].pack(side=LEFT)
-#             frame_input_criteria.pack(side=TOP)
-#         Label(frame_parameters, text='Select parameters for analysis', font='bold', fg='#1F618D').pack(side=TOP)
-#         frame_param_check = Frame(frame_parameters)
-#         frame_param_check.pack(side=TOP)
-#         frame_param_select = Frame(frame_parameters)
-#         frame_param_select.pack(side=TOP)
-#         param_file = Button(frame_param_check, text='Filename path', command=lambda: self.ask4file(self.param_file))
-#         import_param_button = Checkbutton(frame_param_check, text='Select your script with parameters values', variable=self.param_script, command=lambda: param_file.configure(state='active'))
-#         import_param_button.pack(side=LEFT)
-#         param_file.pack(side=LEFT)
-#         param_file.configure(state='disabled')
-#         select_param_button = Checkbutton(frame_param_check, text='Use the GUI to determine analysis parameters', variable=self.param_gui, command=lambda: enable_frames(frame_param_select, self.param_gui))
-#         select_param_button.pack(side=LEFT)
-#         max_param, cntP = self.create_button(frame_param_select, self.param_vars)
-#
-#         enable(frame_param_select, 'disabled')
-#         frame_parameters.pack(side=LEFT)
-#
-#         #row_okcancel = max(length, cntR, cntC)+1
-#         frame_okcancel = Frame(parent)
-#         frame_okcancel.pack(side=BOTTOM)
-#         self.ok_cancel_button(frame_okcancel)
-#
-#     def ok(self):
-#         self.subject_selected = self.get_the_subject_id()
-#         if self.param_script.get():
-#             self.analysis_param = self.param_file[0]
-#         else:
-#             self.analysis_param = self.get_parameter_from_gui(self.param_vars)
-#         self.input_param = {}
-#         for inp in self.input_vars:
-#             self.input_param[inp[6:]] = self.get_parameter_from_gui(self.input_vars[inp])
-#         self.destroy()
-#         self.vars = {}
-#         self.input_vars = {}
-#         self.param_vars = {}
-#
-#     def select_criteria(self, participant_dict):
-#
-#         def check_numerical_value(element):
-#             is_numerical = False
-#             punctuation = ',.?!:'
-#             temp = element.translate(str.maketrans('', '', punctuation))
-#             temp = temp.strip('YymM ')
-#             if temp.isnumeric():
-#                 is_numerical = True
-#             return is_numerical
-#
-#         display_dict = dict()
-#         req_keys = self.bidsdataset.requirements['Requirements']['Subject']['keys']
-#         for key, value in req_keys.items():
-#             if value:
-#                 display_dict[key] = value
-#             elif 'age' in key:
-#                 display_dict[key] = value
-#             elif 'duration' in key:
-#                 display_dict[key] = value
-#         criteria = participant_dict.header
-#         key_list = display_dict.keys()
-#
-#         var_dict = dict()
-#         for key in key_list:
-#             idx = criteria.index(key)
-#             is_string = False
-#             display_value = []
-#             for val_part in participant_dict[1::]:
-#                 is_number = check_numerical_value(val_part[idx])
-#                 if is_number and display_dict[key]:
-#                     display_value.append(val_part[idx])
-#                 elif is_number:
-#                     display_value.append('min_' + key)
-#                     display_value.append('max_' + key)
-#                     is_string = True
-#                 else:
-#                     l_elt = val_part[idx].split(', ')
-#                     for l in l_elt:
-#                         display_value.append(l)
-#             display_value = list(set(display_value))
-#             if is_string:
-#                 var_dict[key] = {}
-#                 display_value = sorted(display_value, reverse=True)
-#                 var_dict[key]['attribut'] = 'StringVar'
-#                 var_dict[key]['value'] = [value for value in display_value]
-#             elif display_value:
-#                 display_value = list(set(display_value).intersection(set(display_dict[key])))
-#                 if len(display_value) == 1 and not 'n/a' in display_value:
-#                     var_dict[key] = {}
-#                     var_dict[key]['attribut'] = 'Label'
-#                     var_dict[key]['value'] = [value for value in display_value]
-#                 elif len(display_value) > 1:
-#                     var_dict[key] = {}
-#                     var_dict[key]['attribut'] = 'Variable'
-#                     var_dict[key]['value'] = [value for value in display_value]
-#
-#         return var_dict
-#
-#     def get_parameter_from_gui(self, var_dict):
-#         res_dict = dict()
-#         for key in var_dict:
-#             att_type = var_dict[key]['attribut']
-#             val_temp = var_dict[key]['value']
-#             if att_type == 'Variable':
-#                 for val in var_dict[key]['results']:
-#                     if val.get():
-#                         idx = var_dict[key]['results'].index(val)
-#                         try:
-#                             res_dict[key].append(val_temp[idx])
-#                         except:
-#                             res_dict[key] = []
-#                             res_dict[key].append(val_temp[idx])
-#             elif att_type == 'StringVar':
-#                 num_value = False
-#                 if isinstance(val_temp, list):
-#                     for id_var in val_temp:
-#                         if id_var.get().isalnum():
-#                             if id_var._name.startswith('min'):
-#                                 minA = int(id_var.get())
-#                                 num_value = True
-#                             elif id_var._name.startswith('max'):
-#                                 maxA = int(id_var.get())
-#                                 num_value = True
-#                             else:
-#                                 res_dict[key] = id_var.get()
-#                     if num_value:
-#                         res_dict[key] = range(minA, maxA)
-#                 else:
-#                     res_dict[key] = val_temp.get()
-#             elif att_type == 'IntVar':
-#                 if isinstance(val_temp, list):
-#                     for id_var in val_temp:
-#                         if id_var.get():
-#                             try:
-#                                 res_dict[key].append(id_var._name)
-#                             except:
-#                                 res_dict[key] = []
-#                                 res_dict[key].append(id_var._name)
-#                 else:
-#                     if val_temp.get():
-#                         res_dict[key] = val_temp._name
-#             elif att_type == 'Listbox':
-#                 res_dict[key] = val_temp.get()
-#             elif att_type == 'Bool':
-#                 if val_temp.get() == True:
-#                     res_dict[key] = True
-#             elif att_type == 'Label':
-#                 res_dict[key] = val_temp
-#             elif att_type == 'File':
-#                 if val_temp:
-#                     res_dict[key] = val_temp[0]
-#
-#         return res_dict
-#
-#     def get_the_subject_id(self):
-#
-#         def get_subject_list_from_criteria(bids_dialog, input_dict, subject_list):
-#             for elt in bids_dialog.participants[1::]:
-#                 elt_in = []
-#                 for key, value in input_dict.items():
-#                     idx_key = bids_dialog.participants.header.index(key)
-#                     if isinstance(value, range):
-#                         elt[idx_key] = elt[idx_key].replace(',', '.')
-#                         age_p = round(float(elt[idx_key].rstrip('YyMm ')))
-#                         if age_p in value:
-#                             elt_in.append(True)
-#                     elif isinstance(value, list):
-#                         for val in value:
-#                             if val in elt[idx_key]:
-#                                 elt_in.append(True)
-#                             else:
-#                                 elt_in.append(False)
-#                     elif isinstance(value, str):
-#                         if value in elt[idx_key]:
-#                             elt_in.append(True)
-#                         else:
-#                             elt_in.append(False)
-#                 elt_in = list(set(elt_in))
-#                 if len(elt_in) == 1 and elt_in[0] is True:
-#                     subject_list.append(elt[0])
-#
-#         subject_list = []
-#         res_dict = {}
-#         if self.All_sub.get():
-#             subject_list = self.subject_dict['Subject']
-#         elif self.Id_sub.get():
-#             for index in self.select_subject.curselection():
-#                 subject_list.append(self.select_subject.get(index))
-#         elif self.Crit_sub.get():
-#             res_dict = self.get_parameter_from_gui(self.vars)
-#             get_subject_list_from_criteria(self, res_dict, subject_list)
-#
-#         return {'sub': subject_list}
-#
-#     def create_button(self, frame, var_dict, max_col=None):
-#         if not max_col:
-#             max_col = 1
-#         label_dict = {clef: '' for clef in var_dict.keys()}
-#         for cnt, key in enumerate(var_dict):
-#             label_dict[key] = Label(frame, text=key)
-#             label_dict[key].grid(row=cnt + 1, sticky=W)
-#             att_type = var_dict[key]['attribut']
-#             val_temp = var_dict[key]['value']
-#             if att_type == 'StringVar':
-#                 if isinstance(val_temp, str):
-#                     var_dict[key]['value'] = StringVar()
-#                     var_dict[key]['value']._name = val_temp
-#                     l = Entry(frame, textvariable=val_temp)
-#                     l.insert(END, val_temp)
-#                     l.grid(row=cnt + 1, column=max_col, sticky=W + E)
-#                 elif isinstance(val_temp, list):
-#                     idx_var =0
-#                     while idx_var < len(val_temp):
-#                         temp = val_temp[idx_var]
-#                         var_dict[key]['value'][idx_var] = StringVar()
-#                         var_dict[key]['value'][idx_var]._name = temp
-#                         l = Entry(frame, textvariable=temp)
-#                         l.insert(END, temp)
-#                         l.grid(row=cnt + 1, column=idx_var + 1, sticky=W + E)
-#                         idx_var += 1
-#                     max_col = max(max_col, idx_var)
-#             elif att_type == 'Listbox': #A revoir
-#                 l = ttk.Combobox(frame, values=val_temp)
-#                 l.grid(row=cnt + 1, column=max_col, sticky=W + E)
-#                 var_dict[key]['value'] = l
-#             elif att_type == 'Variable':
-#                 var_dict[key]['results'] = CheckbuttonList(frame, val_temp, row_list=cnt + 1, col_list=max_col).variable_list
-#             elif att_type == 'IntVar':
-#                 if isinstance(val_temp, list):
-#                     idx_var = 0
-#                     while idx_var < len(val_temp):
-#                         temp = var_dict[key]['value'][idx_var]
-#                         var_dict[key]['value'][idx_var] = IntVar()
-#                         var_dict[key]['value'][idx_var]._name = temp
-#                         l = Checkbutton(frame, text=temp, variable=var_dict[key]['value'][idx_var])
-#                         l.grid(row=cnt + 1, column=idx_var + 1, sticky=W + E)
-#                         idx_var += 1
-#                     max_col = max(max_col, idx_var)
-#                 elif isinstance(val_temp, str):
-#                     var_dict[key]['value'] = IntVar()
-#                     l = Checkbutton(frame, text=val_temp, variable=var_dict[key]['value'])
-#                     l.insert(END, val_temp)
-#                     l.grid(row=cnt + 1, column=max_col, sticky=W + E)
-#             elif att_type == 'Bool':
-#                 if val_temp:
-#                     val = True
-#                 else:
-#                     val = False
-#                 var_dict[key]['value'] = BooleanVar()
-#                 var_dict[key]['value'].set(val)
-#                 l = Checkbutton(frame, text='True', variable=var_dict[key]['value'])
-#                 l.grid(row=cnt + 1, column=max_col, sticky=W + E)
-#             elif att_type == 'Label':
-#                 l = Label(frame, text=val_temp)
-#                 l.grid(row=cnt + 1, column=max_col, sticky=W + E)
-#             elif att_type == 'File':
-#                 l = Button(frame, text='Browse', command=lambda: self.ask4file(var_dict[key]['value']))
-#                 l.grid(row=cnt + 1, column=max_col, sticky=W + E)
-#
-#         return max_col, cnt
-#
-#     def ask4file(self, file):
-#         filename = filedialog.askopenfilename(title='Select file', initialdir=self.bidsdataset.cwdir)
-#         file.append(filename)
+class BidsSelectDialog(TemplateDialog):
+    bidsdataset = None
+    select_subject = None
+
+    def __init__(self, parent, bids_data, analysis_dict=None, batch_file=None):
+
+        if isinstance(bids_data, bids.BidsDataset):
+            self.bids_data = bids_data
+        else:
+            raise TypeError('Second input should be a bids dataset')
+
+        #init variable
+        self.log_error = ''
+        self.soft_name = None
+        self.soft_list = [os.path.splitext(elt)[0] for elt in os.listdir(os.path.join(os.getcwd(), 'SoftwarePipeline')) if elt.endswith('.json')]
+        self.parameter_interface = {}
+        self.parameter_list = {}
+        self.param_file = {}
+        self.param_script = {}
+        self.param_gui = {}
+        self.frame_soft = {}
+        self.batch = False
+        self.batch_file = None
+        self.subject_interface = pip.Interface(self.bids_data)
+        if analysis_dict and isinstance(analysis_dict, pip.PipelineSetting):
+            self.soft_name = analysis_dict.jsonfilename
+            try:
+                self.parameter_interface['Parameters'] = pip.ParameterInterface(self.bids_data, analysis_dict['Parameters'])
+                self.parameter_interface['Input'] = {}
+                for cnt, elt in enumerate(analysis_dict['Parameters']['Input']):
+                    tag_val = elt['tag']
+                    if not tag_val:
+                        tag_val = 'in'+str(cnt)
+                    self.parameter_interface['Input']['Input_'+tag_val] = pip.InputParameterInterface(self.bids_data, elt)
+            except EOFError as err:
+                messagebox.showerror('ERROR', err)
+                return
+            self.copy_values_in_list(self.soft_name)
+            self.parameter_list[self.soft_name]['Software'] = analysis_dict['Name']
+        elif analysis_dict and analysis_dict == 'batch' and batch_file is None:
+            self.batch = True
+        elif analysis_dict and analysis_dict == 'batch' and batch_file:
+            self.batch = True
+            with open(batch_file, 'r') as file:
+                self.batch_file = json.load(file)
+            if any(elt in self.batch_file.keys() for elt in ['analysis_param', 'input_param', 'subject-selected']):
+                temp_batch = {self.batch_file['JsonName']: self.batch_file}
+                self.batch_file = temp_batch
+
+        super().__init__(parent)
+
+    def copy_values_in_list(self, soft_name):
+        self.parameter_list[soft_name] = {}
+        self.parameter_list[soft_name]['JsonName'] = soft_name
+        for key in self.parameter_interface:
+            if isinstance(self.parameter_interface[key], pip.Interface):
+                self.parameter_list[soft_name][key] = type(self.parameter_interface[key])(self.bids_data)
+                self.parameter_list[soft_name][key].copy_values(self.parameter_interface[key])
+            elif isinstance(self.parameter_interface[key], dict):
+                self.parameter_list[soft_name][key] = {}
+                for clef in self.parameter_interface[key]:
+                    if isinstance(self.parameter_interface[key][clef], pip.Interface):
+                        self.parameter_list[soft_name][key][clef] = type(self.parameter_interface[key][clef])(self.bids_data)
+                        self.parameter_list[soft_name][key][clef].copy_values(self.parameter_interface[key][clef])
+
+    def body(self, parent):
+        if self.batch:
+            width = round((self.monitor_width * 3) / 4)
+            height = round((self.monitor_height * 3) / 4)
+            self.geometry('{}x{}'.format(width, height))
+        self.title('Select Subjects and parameters')
+        self.All_sub = IntVar()
+        self.Id_sub = IntVar()
+        self.Crit_sub = IntVar()
+        frame_subject = Frame(parent,  relief=GROOVE, borderwidth=2)
+        Label(frame_subject, text='Select subjects for analysis', font='bold', fg='#1F618D').pack(side=TOP)
+        frame_subject.pack(side=TOP)
+        frame_sub_check = Frame(frame_subject)
+        All_sub_butt = Checkbutton(frame_sub_check, text='All subjects', variable=self.All_sub)
+        All_sub_butt.pack(side=LEFT)
+        Id_sub_butt = Checkbutton(frame_sub_check, text='Select subject(s) Id(s)', variable=self.Id_sub, command=lambda: enable_frames(Frame_subject_list, self.Id_sub))
+        Id_sub_butt.pack(side=LEFT)
+        Crit_sub_butt = Checkbutton(frame_sub_check, text='Select subjects by criteria', variable=self.Crit_sub, command=lambda: enable_frames(Frame_subject_criteria, self.Crit_sub))
+        Crit_sub_butt.pack(side=LEFT)
+        Frame_subject_list = Frame(frame_subject)
+        Frame_subject_criteria = Frame(frame_subject)
+        Label(Frame_subject_criteria, text='Select criteria for multiple subjects analysis', font='bold', fg='#1F618D').grid(row=0)
+
+        #Subject list
+        self.subject = Label(Frame_subject_list, text='Subject', font='bold', fg='#1F618D')
+        self.subject.grid(row=0, sticky=W)
+        list_choice = Variable(Frame_subject_list, self.subject_interface.subject)
+        self.select_subject = Listbox(Frame_subject_list, exportselection=0, listvariable=list_choice, selectmode=MULTIPLE)
+        self.select_subject.grid(row=1, column=1, sticky=W + E)
+        if self.batch_file:
+            Id_sub_butt.select()
+            enable_frames(Frame_subject_list, 1)
+            sub_batch = [sub for key in self.batch_file for sub in self.batch_file[key]['subject_selected']]
+            sub_batch = list(set(sub_batch))
+            for sub in sub_batch:
+                idx = self.subject_interface.subject.index(sub)
+                self.select_subject.selection_set(idx)
+
+        #Criteria to select subjects
+        if self.subject_interface:
+            max_crit, cntC = self.create_button(Frame_subject_criteria, self.subject_interface)
+        else:
+            Crit_sub_butt.config(state=DISABLED)
+            cntC = 0
+
+        #place the frame
+        if cntC < 1:
+            cntC = 1
+        frame_sub_check.pack(side=TOP)
+        Frame_subject_list.pack(side=LEFT)#.grid(row=1, column=0, columnspan=1, rowspan=cntR + cntC)
+        enable(Frame_subject_list, 'disabled')
+        Frame_subject_criteria.pack(side=LEFT)#.grid(row=cntR+1, column=1, rowspan=cntC, columnspan=max_crit)
+        enable(Frame_subject_criteria, 'disabled')
+        frame_subject.pack(side=TOP)
+
+        frame_okcancel = Frame(parent)
+        frame_okcancel.pack(side=BOTTOM)
+        if self.batch or self.soft_name:
+            frame_add_soft = Frame(parent)
+            frame_add_soft.pack(side=TOP)
+            frame_multi_soft = DoubleScrollbarFrame(parent)
+            if not self.batch:
+                self.create_frame_parameters(frame_multi_soft)
+            else:
+                soft_list_button = ttk.Combobox(frame_add_soft, values=self.soft_list)
+                soft_list_button.grid(row=0, column=0)
+                add_soft = Button(frame_add_soft, text='+', command=lambda: self.create_frame_parameters(frame_multi_soft, soft_name=self.soft_list[soft_list_button.current()]))
+                add_soft.grid(row=0, column=1)
+                if self.batch_file:
+                    enable(Frame_subject_list, 'normal')
+                    for key in self.batch_file:
+                        soft_name = self.batch_file[key]['JsonName']
+                        self.create_frame_parameters(frame_multi_soft, soft_name=soft_name, soft_dict=self.batch_file[key])
+            frame_multi_soft.frame.pack(side=TOP)
+            frame_multi_soft.update_scrollbar()
+
+        #row_okcancel = max(length, cntR, cntC)+1
+        self.ok_cancel_button(frame_okcancel)
+        save = Button(frame_okcancel, text='Save', command=lambda: self.save())
+        save.pack(side=RIGHT, fill=Y, expand=1, padx=10, pady=5)
+
+    def create_frame_parameters(self, parent, soft_name=None, soft_dict=None):
+        frame_parameters = Frame(parent.frame, relief=GROOVE, borderwidth=2)
+        if soft_name:
+            self.soft_name = soft_name
+            try:
+                nbr_soft = len(self.frame_soft.keys())
+                analysis_dict = pip.PipelineSetting(self.bids_data, soft_name)
+                self.parameter_interface['Parameters'] = pip.ParameterInterface(self.bids_data, analysis_dict['Parameters'])
+                self.parameter_interface['Input'] = {}
+                for cnt, elt in enumerate(analysis_dict['Parameters']['Input']):
+                    tag_val = elt['tag']
+                    if not tag_val:
+                        tag_val = 'in' + str(cnt)
+                    self.parameter_interface['Input']['Input_' + tag_val] = pip.InputParameterInterface(self.bids_data, elt)
+                    if 'deriv-folder' in self.parameter_interface['Input']['Input_' + tag_val]:
+                        if nbr_soft >= 1:
+                            for nb in range(1, nbr_soft+1, 1):
+                                self.parameter_interface['Input']['Input_' + tag_val]['deriv-folder']['value'].append('{}-Previous analysis results'.format(str(nb)))
+            except EOFError as err:
+                messagebox.showerror('ERROR', err)
+                return
+            self.copy_values_in_list(self.soft_name)
+            self.parameter_list[self.soft_name]['Software'] = analysis_dict['Name']
+            self.frame_soft[self.soft_name] = frame_parameters
+            frame_title = Frame(frame_parameters)
+            Label(frame_title, text=self.soft_name, justify='center', fg='#2E006C').grid(row=0, column=0)
+            Button(frame_title, text='-', command=lambda: self.delete_software_in_batch(self.soft_name)).grid(row=0, column=1)
+            #Button(frame_title, text='valid', command=parent.Frame_to_scrollbar.master.master.grab_set()).grid(row=0, column=2)
+            frame_title.pack(side=TOP)
+
+        if self.parameter_interface['Input']:
+            frame_input_criteria = Frame(frame_parameters)
+            Label(frame_input_criteria, text='Select input criteria', font='bold', fg='#1F618D').pack()
+            frame_dict = dict()
+            for cnt, key in enumerate(self.parameter_interface['Input']):
+                frame_dict[key] = Frame(frame_input_criteria)
+                Label(frame_dict[key], text='{0}: '.format(' '.join(key.split('_')[1:])), font='bold',
+                      fg='#21177D').grid(row=0)
+                if soft_dict:
+                    max_req, cntR = self.create_button(frame_dict[key], self.parameter_interface['Input'][key], value_dict=soft_dict['input_param'][key])
+                else:
+                    max_req, cntR = self.create_button(frame_dict[key], self.parameter_interface['Input'][key])
+                frame_dict[key].pack(side=LEFT)
+            frame_input_criteria.pack(side=LEFT)
+        #Frame with the parameter selection
+        self.param_script[self.soft_name] = IntVar()
+        self.param_gui[self.soft_name] = IntVar()
+        frame_parameters_criteria = Frame(frame_parameters)
+        Label(frame_parameters_criteria, text='Select parameters for analysis', font='bold', fg='#1F618D').pack(side=TOP)
+        frame_param_check = Frame(frame_parameters_criteria)
+        frame_param_check.pack(side=TOP)
+        frame_param_select = Frame(frame_parameters_criteria)
+        frame_param_select.pack(side=TOP)
+        self.param_file[self.soft_name] = ['.json']
+        param_file = Button(frame_param_check, text='Filename path', command=lambda: self.ask4file(self.param_file[self.soft_name]))
+        import_param_button = Checkbutton(frame_param_check, text='Select your script with parameters values',
+                                          variable=self.param_script[self.soft_name],
+                                          command=lambda: param_file.configure(state='active'))
+        import_param_button.pack(side=LEFT)
+        param_file.pack(side=LEFT)
+        param_file.configure(state='disabled')
+        select_param_button = Checkbutton(frame_param_check, text='Use the GUI to determine analysis parameters',
+                                          variable=self.param_gui[self.soft_name],
+                                          command=lambda: enable_frames(frame_param_select, self.param_gui[self.soft_name]))
+        select_param_button.pack(side=LEFT)
+        if soft_dict:
+            select_param_button.select()
+            max_param, cntP = self.create_button(frame_param_select, self.parameter_interface['Parameters'], value_dict=soft_dict['analysis_param'])
+            enable(frame_param_select, 'normal')
+        else:
+            max_param, cntP = self.create_button(frame_param_select, self.parameter_interface['Parameters'])
+            enable(frame_param_select, 'disabled')
+        frame_parameters_criteria.pack(side=LEFT)
+        frame_parameters.pack(side=TOP)
+        parent.frame.update_idletasks()
+        parent.canvas.config(scrollregion=parent.canvas.bbox("all"))
+
+    def delete_software_in_batch(self, soft_name):
+        self.frame_soft[soft_name].destroy()
+        del self.parameter_list[soft_name]
+
+    def get_results(self):
+        self.results = {key: {'input_param': {}, 'analysis_param': {}, 'subject_selected': []} for key in
+                        self.parameter_list}
+        select_sub = []
+        err_dict = {}
+        warn_dict = {}
+        # get the subject selected
+        if self.All_sub.get():
+            select_sub = self.subject_interface.subject
+        elif self.Id_sub.get():
+            for index in self.select_subject.curselection():
+                select_sub.append(self.select_subject.get(index))
+        elif self.Crit_sub.get():
+            res_dict = self.subject_interface.get_parameter()
+            select_sub = self.subject_interface.get_subject_list(res_dict)
+        else:
+            messagebox.showerror('Error Subjects', 'Please select subjects to analyse')
+            return
+        if not select_sub:
+            select_sub = [sub['sub'] for sub in self.bids_data['Subject']]
+        if self.parameter_list:
+            for key in self.parameter_list:
+                self.results[key]['subject_selected'] = select_sub
+                self.results[key]['JsonName'] = self.parameter_list[key]['JsonName']
+                for inp in self.parameter_list[key]['Input']:
+                    self.results[key]['input_param'][inp] = self.parameter_list[key]['Input'][inp].get_parameter()
+                if not self.param_script[key].get():
+                    self.results[key]['analysis_param'] = self.parameter_list[key]['Parameters'].get_parameter()
+                else:
+                    file, ext = os.path.splitext(self.param_file[key][-1])
+                    if not ext == '.json':
+                        err[key] = 'ERROR: The parameters file format is not correct. Format should be json. \n'
+                        return warn_dict, err_dict
+                    else:
+                        with open(self.param_file[key][-1], 'r') as file:
+                            param_vars = json.load(file)
+                        self.results[key]['analysis_param'] = param_vars['analysis_param']
+                        if 'input_param' in param_vars.keys():
+                            self.results[key]['input_param'] = param_vars['input_param']
+                warn, err = pip.verify_subject_has_parameters(self.bids_data,
+                                                              self.results[key]['subject_selected'],
+                                                              self.results[key]['input_param'])
+                warn_dict[key] = warn
+                err_dict[key] = err
+        else:
+            self.results['subject_selected'] = select_sub
+        return warn_dict, err_dict
+
+    def ok(self):
+        warn, err = self.get_results()
+        str_err = ''
+        for key in err:
+            if err[key]:
+                str_err += 'Error parameters {}'.format(key) + ': ' + warn[key] + err[key] + '\n'
+        if str_err:
+            messagebox.showerror('Error parameters', str_err)
+            return
+        str_warn = ''
+        for key in warn:
+            if warn[key]:
+                str_warn += 'Warnng in {}'.format(key) + ': ' + warn[key] + '\n'
+        if str_warn:
+            flag = messagebox.askyesno('Warning',
+                                       'Your parameter selection has created warnings.\n' + str_warn + 'Do you want to modify your selection?')
+            if flag:
+                return
+        self.destroy()
+
+    def save(self):
+        warn, err = self.get_results()
+        if err:
+            str_err = ''
+            for key in err:
+                if err[key]:
+                    str_err += 'Error parameters {}'.format(key) + ': ' + warn[key] + err[key] + '\n'
+            if str_err:
+                messagebox.showerror('Error parameters', str_err)
+                return
+        bp_dir = os.path.join(bids.BidsBrick.cwdir, 'derivatives', 'bids_pipeline')
+        author = bids.BidsBrick.curr_user
+        date = bids.BidsBrick.access_time.strftime("%Y-%m-%dT%H-%M-%S")
+        if self.batch:
+            pip.save_batch(bids.BidsBrick.cwdir, self.results)
+            messagebox.showinfo('Batch saved', 'Your batch has been saved in {}'.format(os.path.join(bp_dir, 'batch')))
+            return
+        else:
+            name = self.parameter_list[self.soft_name]['Software']
+            bp_an = os.path.join(bp_dir, 'analysis_done')
+            os.makedirs(bp_an, exist_ok=True)
+            filename = name + '_' + author + '_' + date + '_saved.json'
+            with open(os.path.join(bp_an, filename), 'w+') as f:
+                json_str = json.dumps(self.results[self.soft_name], indent=1, separators=(',', ': '), ensure_ascii=False,
+                                      sort_keys=False)
+                f.write(json_str)
+            messagebox.showinfo('Batch saved', 'Your batch has been saved in {}'.format(os.path.join(bp_an, filename)))
+            return
+
+    def cancel(self):
+        # put focus back to the parent window
+        if self.parent is not None:
+            self.parent.focus_set()
+        self.parameter_interface = {}
+        self.parameter_list = {}
+        self.frame_soft = {}
+        self.batch = False
+        self.results = {}
+        self.param_file = {}
+        self.param_script = {}
+        self.param_gui = {}
+        self.batch_file = None
+        self.subject_interface = None
+        self.log_error = 'The pipeline selection has been cancel.'
+        self.destroy()
+
+    def create_button(self, frame, var_dict, max_col=None, value_dict=None):
+        cnt=0
+        if not max_col:
+            max_col = 1
+        label_dict = {clef: '' for clef in var_dict.keys() if var_dict[clef]['attribut'] != 'Label'}
+        for cnt, key in enumerate(label_dict):
+            label_dict[key] = Label(frame, text=key)
+            label_dict[key].grid(row=cnt + 1, sticky=W)
+            att_type = var_dict[key]['attribut']
+            val_temp = var_dict[key]['value']
+            val_sel = None
+            if value_dict and key in value_dict.keys():
+                val_sel = value_dict[key]
+            if att_type == 'StringVar':
+                if isinstance(val_temp, str):
+                    var_dict[key]['value'] = StringVar()
+                    var_dict[key]['value']._name = val_temp
+                    l = Entry(frame, textvariable=val_temp)
+                    l.delete(0, END)
+                    if val_sel:
+                        l.insert(END, val_sel)
+                    else:
+                        l.insert(END, val_temp.replace('_'+key, ''))
+                    l.grid(row=cnt + 1, column=max_col, sticky=W + E)
+                elif isinstance(val_temp, list):
+                    idx_var =0
+                    while idx_var < len(val_temp):
+                        temp = val_temp[idx_var]
+                        var_dict[key]['value'][idx_var] = StringVar()
+                        var_dict[key]['value'][idx_var]._name = temp
+                        l = Entry(frame, textvariable=temp)
+                        l.delete(0, END)
+                        l.insert(END, temp)
+                        if isinstance(val_sel, list) and idx_var < len(val_sel):
+                            l.delete(0, END)
+                            l.insert(END, val_sel[idx_var])
+                        l.grid(row=cnt + 1, column=idx_var + 1, sticky=W + E)
+                        idx_var += 1
+                    max_col = max(max_col, idx_var)
+            elif att_type == 'Listbox': #A revoir
+                l = ttk.Combobox(frame, values=val_temp)
+                if val_sel:
+                    if isinstance(val_sel, list) and val_sel[0] != '':
+                        idx = val_temp.index(val_sel[0])
+                        l.current(idx)
+                    elif isinstance(val_sel, str) and val_sel != '':
+                        idx = val_temp.index(val_sel)
+                        l.current(idx)
+                l.grid(row=cnt + 1, column=max_col, sticky=W + E)
+                var_dict[key]['value'] = l
+            elif att_type == 'Variable':
+                var_dict[key]['results'] = CheckbuttonList(frame, val_temp, row_list=cnt + 1, col_list=max_col).variable_list
+                if val_sel:
+                    if isinstance(val_sel, list):
+                        for var in val_sel:
+                            idx = val_temp.index(var)
+                            var_dict[key]['results'][idx].set(1)
+                    elif isinstance(val_sel, str):
+                        idx = val_temp.index(val_sel)
+                        var_dict[key]['results'][idx].set(1)
+            elif att_type == 'Bool':
+                if isinstance(val_temp, str):
+                    if val_temp == 'True':
+                        val = True
+                    else:
+                        val = False
+                elif isinstance(val_temp, bool):
+                    val = val_temp
+                if val_sel:
+                    val = val_sel
+                var_dict[key]['value'] = BooleanVar()
+                var_dict[key]['value'].set(val)
+                l = Checkbutton(frame, text='True', variable=var_dict[key]['value'])
+                l.grid(row=cnt + 1, column=max_col, sticky=W + E)
+            elif att_type == 'Label':
+                l = Label(frame, text=val_temp)
+                l.grid(row=cnt + 1, column=max_col, sticky=W + E)
+            elif att_type == 'File':
+                l = Button(frame, text='Browse', command=lambda file=val_temp: self.ask4file(file))
+                if val_sel:
+                    val_temp.append(val_sel)
+                l.grid(row=cnt + 1, column=max_col, sticky=W + E)
+
+        return max_col, cnt
+
+    def ask4file(self, file):
+        filetypes = ('Files', file)
+        filename = filedialog.askopenfilename(title='Select file', initialdir=self.bids_data.cwdir, filetypes=[filetypes])
+        if len(file) <= 1:
+            file.append(filename)
+        else:
+            file[1] = filename
 
 
 class RequirementsDialog(TemplateDialog):
@@ -2566,8 +2809,9 @@ class RequirementsDialog(TemplateDialog):
         self.attributes("-topmost", True)
 
     def body(self, parent):
-        width = round((self.monitor_width * 3)/4)
-        height = round((self.monitor_height * 3)/4)
+        # width = round(self.monitor_width * 9/10)
+        height = round(self.monitor_height * 9/10)
+        width = self.monitor_width
         self.geometry('{}x{}'.format(width, height))
         smallfont = font.Font(family="Segoe UI", size=9)
         self.option_add('*Font', smallfont)
@@ -2601,17 +2845,17 @@ class RequirementsDialog(TemplateDialog):
         Label(Frame_path, text='Indicate the path of the converters').pack(side=TOP, anchor=N)
 
         #Scrollbar the subject's frame
-        self.frame_subject_info = VerticalScrollbarFrame(parent)
+        self.frame_subject_info = DoubleScrollbarFrame(parent)
         Label(self.frame_subject_info.frame, text='Indicate the subjects information you need', justify='center', fg='#17657D').grid(row=0, column=0, columnspan=3)
         Label(self.frame_subject_info.frame, text='Label').grid(row=1, column=0)
         Label(self.frame_subject_info.frame, text='Possible Values').grid(row=1, column=1)
 
         # Scrollbar the frame with canvas
-        self.frame_required = VerticalScrollbarFrame(parent)
+        self.frame_required = DoubleScrollbarFrame(parent)
         Label(self.frame_required.frame, text='Indicate the modality required in the dataset', justify='center', fg='#17657D').grid(row=0, column=0, columnspan=3)
 
         #Scrollbar the modality's frame
-        self.frame_modality = VerticalScrollbarFrame(parent)
+        self.frame_modality = DoubleScrollbarFrame(parent)
         Label(self.frame_modality.frame, text='Indicate the different possible values for all modalities', justify='center', fg='#17657D').grid(row=0, column=0, columnspan=3)
         self.frame_modality.frame.pack(side=LEFT, fill=BOTH, expand=True)
 
@@ -2792,7 +3036,7 @@ class RequirementsDialog(TemplateDialog):
                     key_label = eval('bids.'+mod+'.keylist')
 
                 for elt in key_label:
-                    if elt not in bids.BidsJSON.get_list_subclasses_names() + bids.BidsTSV.get_list_subclasses_names() + bids.BidsBrick.required_keys + ['fileLoc']:
+                    if elt not in bids.BidsJSON.get_list_subclasses_names() + bids.BidsTSV.get_list_subclasses_names() + bids.BidsFreeFile.get_list_subclasses_names() + bids.BidsBrick.required_keys + ['fileLoc']:
                         if elt == 'modality':
                             mod_list = eval('bids.'+mod+'.allowed_modalities')
                             if required:
@@ -2917,8 +3161,8 @@ class RequirementsDialog(TemplateDialog):
         self.error_str = ''
         if not self.elec_name or 'AnyWave' not in os.path.basename(self.elec_name):
             self.error_str += 'Bids Manager requires AnyWave to convert electrophy data.\n'
-        if not self.imag_name or 'dicm2nii' not in os.path.basename(self.imag_name):
-            self.error_str += 'Bids Manager requires dcm2niix to convert Imaging data.\n'
+        if not self.imag_name or '2nii'not in os.path.basename(self.imag_name):
+            self.error_str += 'Bids Manager requires dcm2niix or dicm2nii to convert Imaging data.\n'
 
         if self.error_str:
             call_raise(self, self.error_str)
@@ -3011,13 +3255,13 @@ class RequirementsDialog(TemplateDialog):
                             mod_dict['type']['modality'] = '_'
                     if self.modality_required_name[i] in bids.GlobalSidecars.get_list_subclasses_names():
                         if isinstance(mod_dict['type'], dict):
-                            if 'space' and 'acq' in mod_dict['type'].keys():
+                            if 'space' in mod_dict['type'].keys() and 'acq' in mod_dict['type'].keys():
                                 error = 'For the modality GlobalSidecars, you cannot have both space and acq.\n "acq" goes with Photo, and "space" goes with electrodes or coordsystem.\n'
                                 call_raise(self, error)
                                 return
                         elif isinstance(mod_dict['type'], list):
                             for elt in mod_dict['type']:
-                                if 'space' and 'acq' in elt.keys():
+                                if 'space' in elt.keys() and 'acq' in elt.keys():
                                     error = 'For the modality GlobalSidecars, you cannot have both space and acq.\n "acq" goes with Photo, and "space" goes with electrodes or coordsystem.\n'
                                     call_raise(self, error)
                                     return
@@ -3108,20 +3352,96 @@ class RequirementsDialog(TemplateDialog):
         self.destroy()
 
 
-class TableForStatsDialog(TemplateDialog):
+class Data2ImportTemplate(TemplateDialog):
 
-    def __init__(self, parent, deriv_dir):
-        self.derivatives_dir = deriv_dir
-        reject_dir = ['parsing', 'log']
-        self.deriv_list = [entry for entry in os.listdir(deriv_dir) if not os.path.isfile(os.path.join(deriv_dir,entry)) and not entry in reject_dir]
-        self.deriv_button = {key: IntVar() for key in self.deriv_list}
-        self.display_button = {key: None for key in self.deriv_list}
-        #self.display_button = {'display_'+key: '' for key in self.deriv_list}
+    def __init__(self, parent):
+        self.sub_dict = {}
+        self.dev_dict = {}
+        self.mod = [elt for elt in bids.ModalityType.get_list_subclasses_names() if elt not in ['Imaging', 'Electrophy',
+                                                                                                'Process', 'ImagingProcess',
+                                                                                                'ElectrophyProcess']]
         super().__init__(parent)
 
     def body(self, parent):
-        self.title('Select directories to create your statistical table')
-        self.geometry('800x600')
+        self.frame_subject = DoubleScrollbarFrame(parent)
+        Label(self.frame_subject.frame, text='Add Subject in data2import').grid(row=0, column=0)
+        Button(self.frame_subject.frame, text='+', command=lambda: self.add_elt(self.frame_subject)).grid(row=0, column=1)
+        self.frame_subject.Frame_to_scrollbar.pack(side=TOP)
+        self.frame_subject.update_scrollbar()
+
+        self.frame_dev = DoubleScrollbarFrame(parent)
+        Label(self.frame_dev.frame, text='Add Derivatives in data2import').grid(row=0, column=0)
+        Button(self.frame_dev.frame, text='+', command=lambda: self.add_elt(self.frame_dev, dev=True)).grid(row=0, column=1)
+        self.frame_dev.Frame_to_scrollbar.pack(side=TOP)
+        self.frame_dev.update_scrollbar()
+
+        frame_okcancel = Frame(parent)
+        self.ok_cancel_button(frame_okcancel)
+        frame_okcancel.pack(side=BOTTOM)
+
+    def add_elt(self, parent, dev=False):
+        if dev:
+            tmp_dict = self.dev_dict
+            st_label = 'Derivatives'
+        else:
+            tmp_dict = self.sub_dict
+            st_label = 'Subject'
+        frame_sub = Frame(parent.frame)
+        nbr = len(tmp_dict) + 1
+        tmp_dict[nbr] = {'name': StringVar(), 'modality': []}
+        ll = Label(frame_sub, text=st_label+' Name:')
+        ll.grid(row=0, column=0)
+        le = Entry(frame_sub, textvariable=tmp_dict[nbr]['name'])
+        le.grid(row=0, column=1)
+        lm = Label(frame_sub, text='Modalities:')
+        lm.grid(row=0, column=2)
+        tmp_dict[nbr]['modality'] = CheckbuttonList(frame_sub, self.mod, row_list=0, col_list=3).variable_list
+        frame_sub.grid(row=nbr)
+
+        parent.frame.update_idletasks()
+        parent.canvas.config(scrollregion=parent.canvas.bbox("all"))
+
+    def ok(self):
+        self.destroy()
+        self.results = {'subject': [], 'derivatives': []}
+        self.results['subject'] = self.get_results(self.sub_dict)
+        self.results['derivatives'] = self.get_results(self.dev_dict)
+
+    def get_results(self, tmp_dict):
+        elt_list = []
+        for elt in tmp_dict:
+            val = {}
+            val['name'] = tmp_dict[elt]['name'].get()
+            val['modality'] = []
+            for v in tmp_dict[elt]['modality']:
+                if v.get():
+                    idx = tmp_dict[elt]['modality'].index(v)
+                    val['modality'].append(self.mod[idx])
+            elt_list.append(val)
+        return elt_list
+
+    def cancel(self):
+        self.destroy()
+        self.results = {}
+        self.sub_dict = {}
+        self.dev_dict = {}
+
+
+class HandleMultipleSameProcess(TemplateDialog):
+
+    def __init__(self, parent, deriv_list, similar_process):
+        self.derivatives_dir = os.path.join(parent.curr_bids.dirname, 'derivatives')
+        self.derivatives_list = deriv_list
+        self.software_dir = parent.folder_software
+        self.multi_soft = [fold for elt in similar_process for fold in deriv_list if fold.startswith(elt)]
+        self.deriv_button = {key: IntVar() for key in self.multi_soft}
+        self.display_button = {key: None for key in self.multi_soft}
+        super().__init__(parent)
+
+    def body(self, parent):
+        self.title('Select the version that should not appear in the statistical table')
+        #self.geometry('1000x800')
+        #body_frame = VerticalScrollbarFrame(parent)
         double_frame = Frame(parent)
         double_frame.pack(side=TOP)
         folder_frame = Frame(double_frame, relief='groove')
@@ -3130,18 +3450,22 @@ class TableForStatsDialog(TemplateDialog):
         display_frame.frame.pack(side=LEFT, fill=BOTH, expand=True, anchor='nw')
         okcancel_frame = Frame(parent)
         okcancel_frame.pack(side=BOTTOM)
+        cp = 0
         for cnt, key in enumerate(self.deriv_button):
             l = Checkbutton(folder_frame, text=key,  variable=self.deriv_button[key])
-            l.grid(row=cnt+1, column=0)
+            l.grid(row=cnt+cp+1, column=0)
             self.display_button[key] = Button(folder_frame, text='display '+key, command=lambda fm=display_frame, dname=key: self.display_dataset(fm, dname))
-            self.display_button[key].grid(row=cnt+1, column=1)
+            self.display_button[key].grid(row=cnt+cp+1, column=1)
+            cp += 1
         display_frame.update_scrollbar()
         self.ok_cancel_button(okcancel_frame)
+        #body_frame.update_scrollbar()
 
     def display_dataset(self, frame2display, deriv_name):
         def deletewidgetframe(frame2delete):
             for w in frame2delete.winfo_children():
                 w.destroy()
+
         deletewidgetframe(frame2display.frame)
         dataset_file = os.path.join(self.derivatives_dir, deriv_name, 'dataset_description.json')
         datastore = bids.DatasetDescJSON()
@@ -3157,43 +3481,12 @@ class TableForStatsDialog(TemplateDialog):
 
     def ok(self):
         self.results = [key for key in self.deriv_button if self.deriv_button[key].get()]
-        self.destroy()
-
-
-class SelectHowToCreateTable(TemplateDialog):
-
-    def __init__(self, parent, select_deriv):
-        self.select_deriv = {key: {} for key in select_deriv}
-        self.multiple_choice = ['Average', 'Maximum', 'All']
-        super().__init__(parent)
-
-    def body(self, parent):
-        self.title('What to do if multiple files by participants?')
-        value_radio = len(self.select_deriv)*len(self.multiple_choice)
-        values=list(range(2, value_radio+2, 1))
-        a=0
-        for key in self.select_deriv:
-            self.select_deriv[key]['frame'] = Frame(parent, relief=GROOVE, borderwidth=2)
-            self.select_deriv[key]['value'] = []
-            #self.select_deriv[key]['button'] = []
-            Label(self.select_deriv[key]['frame'], text=key).pack(side=TOP)
-            for val in self.multiple_choice:
-                self.select_deriv[key]['value'].append(IntVar())
-                b = Radiobutton(self.select_deriv[key]['frame'], variable=self.select_deriv[key]['value'][-1], text=val, value=values[a])
-                b.pack(side=LEFT, expand=1)
-                #self.select_deriv[key]['button'].append(b)
-                a=+1
-                #self.select_deriv[key]['value'].append(b)
-            self.select_deriv[key]['frame'].pack(side=TOP)
-        self.ok_cancel_button(parent)
-
-    def ok(self):
-        self.results = {key: '' for key in self.select_deriv}
-        for key in self.select_deriv:
-            for cnt, val in enumerate(self.select_deriv[key]['value']):
-                if val.get():
-                    self.results[key] = self.multiple_choice[cnt]
-        self.destroy()
+        if not self.results:
+            flag = messagebox.askyesno('Warning !!', 'All processing versions will be used to create the statistics table.\nDo you want to continue?')
+            if flag:
+                self.destroy()
+        else:
+            self.destroy()
 
 
 class VerticalScrollbarFrame(Frame):
@@ -3230,9 +3523,9 @@ class HorizontalScrollbarFrame(Frame):
     def __init__(self, parent):
         self.Frame_to_scrollbar = Frame(parent, relief=GROOVE, borderwidth=2)
         self.Frame_to_scrollbar.pack(side=LEFT, fill=BOTH, expand=True)
-        self.vsb = Scrollbar(self.Frame_to_scrollbar, orient="horizontal")
-        self.vsb.pack(side=BOTTOM, fill=X)
-        self.canvas = Canvas(self.Frame_to_scrollbar, xscrollcommand=self.vsb.set)
+        self.hsb = Scrollbar(self.Frame_to_scrollbar, orient="horizontal")
+        self.hsb.pack(side=BOTTOM, fill=X)
+        self.canvas = Canvas(self.Frame_to_scrollbar, xscrollcommand=self.hsb.set)
         self.canvas.pack(side=LEFT, fill=BOTH, expand=True)
         self.frame = Frame(self.canvas, bg='white')#, relief=GROOVE, borderwidth=2)
         self.frame.pack()
@@ -3245,7 +3538,33 @@ class HorizontalScrollbarFrame(Frame):
         self.canvas.pack()
         self.frame.update_idletasks()
         self.canvas.config(scrollregion=self.canvas.bbox("all"))
-        self.vsb.configure(command=self.canvas.xview)
+        self.hsb.configure(command=self.canvas.xview)
+        self.frame.bind('<Configure>', myfunction(self.canvas))
+
+
+class DoubleScrollbarFrame(Frame):
+    def __init__(self, parent):
+        self.Frame_to_scrollbar = Frame(parent, relief=GROOVE, borderwidth=2)
+        self.Frame_to_scrollbar.pack(side=LEFT, fill=BOTH, expand=True)
+        self.vsb = Scrollbar(self.Frame_to_scrollbar, orient="vertical")
+        self.vsb.pack(side=RIGHT, fill=Y)
+        self.hsb = Scrollbar(self.Frame_to_scrollbar, orient="horizontal")
+        self.hsb.pack(side=BOTTOM, fill=X)
+        self.canvas = Canvas(self.Frame_to_scrollbar, xscrollcommand=self.hsb.set, yscrollcommand=self.vsb.set)
+        self.canvas.pack(side=LEFT, fill=BOTH, expand=True)
+        self.frame = Frame(self.canvas)#, relief=GROOVE, borderwidth=2)
+        self.frame.pack()
+
+    def update_scrollbar(self):
+        def myfunction(canvas):
+            canvas.configure(scrollregion=canvas.bbox("all"))
+
+        self.canvas.create_window(0, 0, window=self.frame, anchor='nw') #scrollregion=self.canvas.bbox("all"),
+        self.canvas.pack()
+        self.frame.update_idletasks()
+        self.canvas.config(scrollregion=self.canvas.bbox("all"))
+        self.hsb.configure(command=self.canvas.xview)
+        self.vsb.configure(command=self.canvas.yview)
         self.frame.bind('<Configure>', myfunction(self.canvas))
 
 
@@ -3289,6 +3608,12 @@ class CheckbuttonList(Frame):
         self.combo_entry.toplevel.withdraw()
 
     def call_checkbutton_list(self):
+        def grab_set_master(parent):
+            if isinstance(parent.master, Frame) or isinstance(parent.master, Canvas):
+                grab_set_master(parent.master)
+            else:
+                parent.master.grab_set()
+
         but_width = self.return_button.winfo_reqwidth()
         self.combo_entry.toplevel.geometry("%dx%d+%d+%d" % (self.combo_entry.winfo_reqwidth()+but_width, 125, self.combo_entry.winfo_rootx(),
                              self.combo_entry.winfo_rooty()))
@@ -3297,9 +3622,16 @@ class CheckbuttonList(Frame):
             self.combo_entry.toplevel.deiconify()
             self.combo_entry.toplevel.grab_set()
         else:
+            self.combo_entry.delete(0, END)
+            for var in self.variable_list:
+                if var.get():
+                    idx = self.variable_list.index(var)
+                    self.combo_entry.insert(END, self.variable_string[idx])
+                    self.combo_entry.insert(END, ' ')
             self.hidden = False
             self.combo_entry.toplevel.withdraw()
-            self.parent.master.master.grab_set()
+            #self.parent.master.master.master.grab_set()
+            grab_set_master(self.parent)
 
 
 def enable(frame, state):
@@ -3310,7 +3642,10 @@ def enable(frame, state):
             pass
 
 def enable_frames(frame, button):
-    button_value = button.get()
+    if isinstance(button, int):
+        button_value = button
+    else:
+        button_value = button.get()
     if button_value == 1:
         if isinstance(frame, list):
             for fr in frame:
@@ -3342,7 +3677,7 @@ def make_splash():
     return splash + ['Version ' + BidsManager.version]
 
 
-if __name__ == '__main__':
+def run_app():
     from time import sleep
 
     splsh = make_splash()
@@ -3360,7 +3695,7 @@ if __name__ == '__main__':
     width = root.winfo_screenwidth()
     height = root.winfo_screenheight()
     root.option_add("*Font", "10")
-    my_gui = BidsManager(width, height)
+    my_gui = BidsManager(root, width, height)
     root.protocol("WM_DELETE_WINDOW", my_gui.close_window)
     if not bids.BidsBrick.curr_user.lower() == 'jegou':
         if platform.system() == 'Windows':
@@ -3374,3 +3709,6 @@ if __name__ == '__main__':
     # root.update()
     # root.deiconify()
     root.mainloop()
+
+if __name__ == '__main__':
+    run_app()

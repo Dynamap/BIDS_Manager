@@ -1,0 +1,57 @@
+{
+ "Name": "gardel",
+ "Path": "",
+ "Parameters": {
+  "Mode": [
+   "automatic",
+   "manual"
+  ],
+  "Callname": "GARDEL",
+  "Input": [
+   {
+    "tag": "preimp",
+    "multiplesubject": false,
+    "modality": "Anat",
+    "type": "file"
+   },
+   {
+    "tag": "postimp",
+    "multiplesubject": false,
+    "modality": "Anat",
+    "type": "file"
+   },
+   {
+    "tag": "electrodes",
+    "multiplesubject": false,
+    "modality": "Ieeg",
+    "type": "file",
+	"deriv-folder": "",
+	"filetype": ".tsv",
+	"optional": true
+   },
+   {
+    "tag": "atlas",
+    "multiplesubject": false,
+    "modality": "Anat",
+    "type": "file",
+	"deriv-folder": "",
+	"filetype": ".nii",
+	"optional": true
+   }
+  ],
+  "Output": {
+   "tag": "output_dir",
+   "multiplesubject": false,
+   "directory": true,
+   "type": "dir",
+   "extension": []
+  },
+  "no_gui": {
+   "possible_value": [
+    "yes",
+    "no"
+   ],
+   "multipleselection": false
+  }
+ }
+}

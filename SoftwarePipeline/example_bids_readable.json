@@ -1,0 +1,108 @@
+{
+ "Name": "delphos",
+ "Path": "",
+ "Parameters": {
+  "Mode": [
+   "automatic"
+  ],
+  "Callname": "Delphos4BIDS",
+  "Input": [
+   {
+    "tag": "",
+    "multiplesubject": true,
+    "modality": [
+     "Ieeg",
+     "Meg",
+     "Eeg"
+    ],
+    "type": "dir"
+   }
+  ],
+  "modality": {
+   "readbids": true,
+   "type": "modality"
+  },
+  "sub": {
+   "readbids": true,
+   "type": "sub"
+  },
+  "ses": {
+   "readbids": true,
+   "type": "ses"
+  },
+  "task": {
+   "readbids": true,
+   "type": "task"
+  },
+  "acq": {
+   "readbids": true,
+   "type": "acq"
+  },
+  "run": {
+   "readbids": true,
+   "type": "run"
+  },
+  "proc": {
+   "readbids": true,
+   "type": "proc"
+  },
+  "start": {
+   "default": 0,
+   "unit": "sec"
+  },
+  "duration": {
+   "default": -1,
+   "unit": "sec"
+  },
+  "detection_type": {
+   "possible_value": [
+    "Osc",
+    "Spk"
+   ],
+   "multipleselection": true
+  },
+  "freq_band_start": {
+   "default": 8,
+   "unit": "Hz"
+  },
+  "freq_band_end": {
+   "default": -1,
+   "unit": "Hz"
+  },
+  "artefact": {
+   "possible_value": [
+    "Baseline",
+    "Stim",
+	"artefact"
+   ],
+   "multipleselection": false
+  },
+  "use_markers": {
+   "possible_value": [
+    "Baseline",
+    "Stim"
+   ],
+   "multipleselection": false
+  },
+  "threshold": {
+   "default": "40",
+   "unit": ""
+  },
+  "freqbandfile": {
+   "fileLoc": "",
+   "extension": ".txt"
+  },
+  "Output": {
+   "tag": "derivatives",
+   "multiplesubject": true,
+   "directory": true,
+   "type": "",
+   "extension": [
+    ".jpg",
+    ".mat",
+    ".tsv",
+    ".mrk"
+   ]
+  }
+ }
+}

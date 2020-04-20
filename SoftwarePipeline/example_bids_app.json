@@ -1,0 +1,72 @@
+{"Name": "freesurfer",
+ "Path": "",
+ "Parameters": {
+	"Mode": ["automatic"],
+	"command_line_base": "",
+	"Intermediate": "Docker",
+	"Callname": "bids/freesurfer",
+	"participant": {"default": false},
+	"group": {"default": false},
+	"--participant_label": {
+	 "readbids": true,
+	 "type": "sub"
+	},
+	"--session_label": {
+	 "readbids": true,
+	 "type": "ses"
+	},
+	"--n_cpus": {
+	 "default": "",
+	 "unit":"nbr_of_cpus"
+	},
+	"--stages": {
+	 "possible_value": ["autorecon1", "autorecon2", "autorecon2-cp", "autorecon2-wm", "autorecon-pial", "autorecon3", "autorecon-all", "all"],
+	 "multipleselection": true
+	},
+	"--steps": {
+	 "possible_value": ["cross-sectional", "template", "longitudinal"],
+	 "multipleselection": true
+	},
+	"--template_name": {
+	 "default": "average",
+	 "unit": ""
+	},
+	"--license_file": {
+	 "fileLoc": "",
+	 "extension": "txt"
+	},
+	"--acquisition_label": {
+	 "readbids": true,
+	 "type": "acq"
+	},
+	"--refine_pial_acquisition": {
+	 "readbids": true,
+	 "type": "acq"
+	},
+	"--multiple_sessions": {
+	 "possible_value": ["longitudinal", "multiday"],
+	 "multipleselection": false
+	},
+	"--refine_pial": {
+	 "possible_value": ["T2", "FLAIR", "T1only", "None"],
+	 "multipleselection": false
+	},
+	"--hires_mode": {
+	 "possible_value": ["auto", "enable", "disable"],
+	 "multipleselection": false
+	},
+	"--parcellations": {
+	 "possible_value": ["aparc", "aparc.a2009s"],
+	 "multipleselection": true
+	},
+	"--measurements": {
+	 "possible_value": ["area", "volume", "thickness", "thicknessstd", "meancurv", "gauscurv", "foldind", "curvind"],
+	 "multipleselection": true
+	},
+	"--bids_validator_config": {
+	 "fileLoc": "",
+	 "extension": "json"
+	},
+	"--skip_bids_validator": {"default": false}
+   }
+}

@@ -1,0 +1,53 @@
+{
+ "Name": "Graphmeasure",
+ "Path": "Path/file.m",
+ "Parameters": {
+  "Mode": [
+   "automatic"
+  ],
+  "Callname": "GraphMeasure",
+  "Intermediate": "Matlab",
+  "Input": [
+   {
+    "tag": "",
+    "multiplesubject": false,
+    "modality": [
+     "Ieeg",
+     "Eeg",
+     "Meg"
+    ],
+    "type": "file",
+    "deriv-folder": "",
+    "filetype": ".mat",
+    "optional": false
+   }
+  ],
+  "Output": {
+   "tag": "output_dir",
+   "multiplesubject": false,
+   "directory": true,
+   "type": "dir",
+   "extension": [
+    ".tsv",
+    ".jpg"
+   ]
+  },
+  "h2_threshold": {
+   "default": "0",
+   "unit": ""
+  },
+  "lag_threshold": {
+   "default": "1",
+   "unit": ""
+  },
+  "degree": {
+   "default": true
+  },
+  "strength": {
+   "default": true
+  },
+  "all_markers_together": {
+   "default": true
+  }
+ }
+}

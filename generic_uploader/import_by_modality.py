@@ -22,7 +22,7 @@
 
 from PyQt5 import QtWidgets
 import os
-import ins_bids_class
+from bids_manager import ins_bids_class
 from generic_uploader.meg_import_dialog import MegImportDialog
 
 

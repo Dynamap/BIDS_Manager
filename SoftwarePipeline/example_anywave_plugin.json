@@ -1,0 +1,60 @@
+{
+ "Name": "ICA",
+ "Path": "AnyWAvePath/AnyWave.exe",
+ "Parameters": {
+  "Mode": [
+   "automatic"
+  ],
+  "Intermediate": "AnyWave",
+  "Callname": "ica",
+  "hp": {
+   "default": "0",
+   "unit": "Hz"
+  },
+  "lp": {
+   "default": "0",
+   "unit": "Hz"
+  },
+  "comp": {
+   "default": "",
+   "unit": "components"
+  },
+  "downsampling": {
+   "default": true
+  },
+  "modality": {
+   "readbids": true,
+   "type": "modality"
+   },
+  "use_markers": {
+   "read": "*.mrk",
+   "elementstoread": "0",
+   "multipleselection": true
+  },
+  "skip_markers": {
+   "read": "*.mrk",
+   "elementstoread": "0",
+   "multipleselection": true
+  },
+  "skip_bad": {
+    "default": true
+  },
+  "Input": [
+   {
+    "tag": "--input_file",
+	"multiplesubject": false,
+    "modality": [
+     "Ieeg", "Meg", "Eeg"
+    ],
+    "type": "file"
+   }
+  ],
+  "Output": {
+   "tag": "--output_dir",
+   "multiplesubject": false,
+   "directory": true,
+   "type": "",
+   "extension": ".mat"
+  }
+ }
+}
