@@ -1056,6 +1056,10 @@ class BidsManager(Frame, object):  # !!!!!!!!!! object is used to make the class
         multi_soft = list(set(multi_soft))
         if multi_soft:
             select_list = HandleMultipleSameProcess(self, deriv_list, multi_soft).results
+            if isinstance(select_list, str):
+                self.update_text(select_list)
+                self.make_available()
+                return
         try:
             log_error = write_big_table(deriv_dir, select_list)
             if log_error:
@@ -3487,6 +3491,10 @@ class HandleMultipleSameProcess(TemplateDialog):
                 self.destroy()
         else:
             self.destroy()
+
+    def cancel(self):
+        self.results = 'Statistic Table Creation has been canceled !!'
+        self.destroy()
 
 
 class VerticalScrollbarFrame(Frame):

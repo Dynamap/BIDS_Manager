@@ -1256,7 +1256,7 @@ class Process(ModalityType):
     keylist = BidsBrick.keylist + ['ses', 'task', 'acq', 'run', 'proc', 'desc', 'modality', 'fileLoc']
     required_keys = ModalityType.required_keys
     required_protocol_keys = []
-    allowed_file_formats = ['.tsv', '.txt', '.mat', '.nii', '.pial', '.gii']
+    allowed_file_formats = ['.tsv', '.txt', '.mat']
 
     def __init__(self):
         super().__init__()
@@ -1270,7 +1270,7 @@ class ProcessJSON(BidsJSON):
 class ImagingProcess(Process):
     keylist = Process.keylist + ['proc', 'desc', 'hemi', 'space', 'label']
     allowed_modalities = ['mask', 'dseg', 'probseg', 'dparc']
-    allowed_file_formats = ['.nii', '.nii.gz', '.gii', '.pial', '.surf.gii']
+    allowed_file_formats = Process.allowed_file_formats + ['.nii', '.nii.gz', '.gii', '.pial', '.surf.gii']
 
     def check_files_conformity(self):
         pass
@@ -1284,7 +1284,7 @@ class ImagingProcessJSON(ProcessJSON):
 class ElectrophyProcess(Process):
     keylist = Process.keylist + ['ElectrophyProcessJSON']
     allowed_modalities = ['annotations', 'meg', 'eeg', 'ieeg', 'proj', 'epochs', 'average', 'mixing', 'components']
-    allowed_file_formats = ['.mat', '.tsv', '.npy', '.txt', '.h5']
+    allowed_file_formats = Process.allowed_file_formats + ['.npy', '.h5', '.vhdr', '.edf', '.set', '.ades']
 
     def check_files_conformity(self):
         if self['fileLoc'].endswith('.tsv'):

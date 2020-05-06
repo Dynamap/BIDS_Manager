@@ -180,12 +180,14 @@ def convert_xls_file(filename):
         all_true = []
         last_elt = nbr[0]
         for elt in nbr[1:]:
-            if elt == last_elt +1:
+            if elt == last_elt + 1:
                 all_true.append(True)
             else:
                 all_true.append(False)
             last_elt = elt
         if all(all_true):
+            return True
+        elif all_true.count(False) < round(len(nbr)*10/100):
             return True
         else:
             return False
@@ -207,14 +209,22 @@ def convert_xls_file(filename):
                 jj = j +1
                 break
         tsv_tmp_dict = {val: [] for key, val in tmp_dict.items()}
-        for lines in worksheet._cell_values[jj:]:
+        for nbr, lines in enumerate(worksheet._cell_values[jj:]):
             if not all(elt == '' for elt in lines):
                 for cnt, elt in enumerate(lines):
-                    if cnt < len(tmp_dict):
+                    if cnt < len(tmp_dict)and cnt in tmp_dict:
                         if tmp_dict[cnt] == 'DOB' and elt != '':
                             dob = datetime.strptime(elt, '%d\%m\%Y')
                             elt = dob.strftime('%d%m%Y')
+                        elif tmp_dict[cnt].startswith('Date') and isinstance(elt, float):
+                            date = datetime(*xlrd.xldate_as_tuple(elt, workbook.datemode))
+                            elt = date.strftime('%d/%m/%Y')
                         tsv_tmp_dict[tmp_dict[cnt]].append(elt)
+                    elif cnt not in tmp_dict and cnt-1 in tmp_dict:
+                        if len(tsv_tmp_dict[tmp_dict[cnt-1]]) <= nbr:
+                            tsv_tmp_dict[tmp_dict[cnt - 1]].append(elt)
+                        elif not tsv_tmp_dict[tmp_dict[cnt - 1]][-1]:
+                            tsv_tmp_dict[tmp_dict[cnt - 1]][-1] = elt
             else:
                 idx = worksheet._cell_values.index(lines) + 1
                 for line in worksheet._cell_values[idx::]:
