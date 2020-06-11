@@ -21,6 +21,7 @@
 import struct
 import os
 import pydicom
+import nibabel as nib
 
 def read_headers(file):
     filename, file_extension = os.path.splitext(str(file))
@@ -106,6 +107,16 @@ def read_headers(file):
             birthdate = "1111111"
         lastname = lastname.lower()
         firstname = firstname.lower()
+    elif file_extension == ".nii":
+        # ajouter ici la lecture des niftii
+        img = nib.load(file)
+        header = img.header
+        idx_of_name = [idx for idx in list(range(0, len(header.keys()))) if header.keys()[idx] == 'db_name']
+        idx_of_name = idx_of_name[0]
+        header_info_list = header.structarr.tolist()
+        lastname = header_info_list[idx_of_name].decode("utf-8")
+        firstname = ''
+        birthdate = ''
     else:                                                     # prendre en compte aussi les .vhdr
         lastname = firstname = ""
         birthdate = "1111111"

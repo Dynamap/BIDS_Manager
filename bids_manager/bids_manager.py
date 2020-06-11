@@ -1606,7 +1606,7 @@ class ParticipantsTSVDialog(BidsTSVDialog):
                                                      lambda event: print('To be implemented'))
 
     def open_subject_info(self, ln, cm):
-        self.parent.bidsdataset.is_subject_present(self.key_labels[ln][cm]['text'])
+        self.parent.bidsdataset.is_subject_present(self.key_labels[ln][cm]['text'].replace('sub-', ''))
         sub = self.parent.bidsdataset.curr_subject['Subject']
         if 'Subject' in self.parent.key_disabled:
             disabl = sub.keylist

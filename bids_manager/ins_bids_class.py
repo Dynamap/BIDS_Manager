@@ -843,13 +843,6 @@ class BidsBrick(dict):
                         os.path.join(Data2Import.dirname, self['fileLoc']) + '" ' + ' --output_dir "' + \
                         Data2Import.dirname + '" ' + name_cmd + bids_format + '"'
 
-            # # cmd_line = '""' + converter_path + '"' + ' --seegBIDS "' +\
-            # #            os.path.join(Data2Import.dirname, self['fileLoc']) + '" ' +\
-            # #            name_cmd + ' --bids_dir "' + Data2Import.dirname + '" --bids_format vhdr"'
-            # cmd_line = '""' + converter_path + '"' + ' --toBIDS --input_file "' + \
-            #            os.path.join(Data2Import.dirname, self['fileLoc']) + '" ' + ' --output_dir "' + \
-            #            Data2Import.dirname + '" ' + name_cmd + ' --bids_format vhdr"'
-
             os.system(cmd_line)
         elif isinstance(self, GlobalSidecars):
             fname = filename + os.path.splitext(self['fileLoc'])[1]
@@ -2768,7 +2761,10 @@ class BidsDataset(MetaBrick):
                             is_same = scan.compare_scanstsv(tmp_scantsv)
                             if is_same:
                                 scan['fileLoc'] = file.path
-                        is_bids.append(validator(file.path, subinfo.cwdir))
+                        try:
+                            is_bids.append(validator(file.path, subinfo.cwdir))
+                        except:
+                            continue
                     elif mod_dir and file.is_file():
                         if flag_process and not mod_dir.endswith('Process'):
                             mod_dir = mod_dir + 'Process'
@@ -2802,7 +2798,10 @@ class BidsDataset(MetaBrick):
                         #     subinfo[mod_dir][-1]['fileLoc'] = file.path
                         #     subinfo[mod_dir][-1].get_attributes_from_filename()
                         #     subinfo[mod_dir][-1].get_sidecar_files()
-                        is_bids.append(validator(file.path, subinfo.cwdir))
+                        try:
+                            is_bids.append(validator(file.path, subinfo.cwdir))
+                        except:
+                            continue
                     elif mod_dir and file.is_dir():
                         if flag_process and not mod_dir.endswith('Process'):
                             mod_dir = mod_dir + 'Process'
@@ -3080,7 +3079,15 @@ class BidsDataset(MetaBrick):
                     except:
                         shutil.copy2(src_fname, path_dst[cnt])
                     if os.path.basename(src_fname) == os.path.basename(mod_dict2import['fileLoc']):
-                        src_data_sub = bids_dst['SourceData'][-1]['Subject'][bids_dst.curr_subject['index']]
+                        try:
+                            src_data_sub = bids_dst['SourceData'][-1]['Subject'][bids_dst.curr_subject['index']]
+                        except:
+                            bids_dst['SourceData'][-1].is_subject_present(sub['sub'])
+                            if bids_dst['SourceData'][-1].curr_subject['isPresent']:
+                                src_data_sub = bids_dst['SourceData'][-1].curr_subject['Subject']
+                            else:
+                                bids_dst['SourceData'][-1]['Subject'].append(Subject())
+                                src_data_sub = bids_dst['SourceData'][-1]['Subject'][-1]
                         src_data_sub[mod_type] = eval(mod_type + '()')
                         tmp_attr = mod_dict2import.get_attributes()
                         tmp_attr['fileLoc'] = path_dst[cnt]
@@ -3514,7 +3521,7 @@ class BidsDataset(MetaBrick):
     def remove(self, element2remove, with_issues=True, in_deriv=None):
         """method to remove either the whole data set, a subject or a file (with respective sidecar files)"""
         # a bit bulky rewrite to make it nice
-        if element2remove is self:
+        if element2remove is self and not isinstance(element2remove, Pipeline):
             shutil.rmtree(self.dirname)
             print('The whole Bids dataset ' + self['DatasetDescJSON']['Name'] + ' has been removed')
             BidsDataset.clear_log()
@@ -3779,7 +3786,7 @@ class BidsDataset(MetaBrick):
         elif isinstance(element2remove, Pipeline):
             self.is_pipeline_present(element2remove['name'])
             if self.curr_pipeline['isPresent']:
-                shutil.rmtree(os.path.join(self.dirname, 'derivatives', element2remove['name']))
+                shutil.rmtree(os.path.join(self.dirname, 'derivatives', element2remove['name']), ignore_errors=True)
                 self['Derivatives'][0]['Pipeline'].pop(self.curr_pipeline['index'])
                 self.save_as_json()
                 self.write_log(element2remove['name'] + ' has been removed from derivatives folder.')
@@ -4508,12 +4515,13 @@ class Issue(BidsBrick):
                 if key == 'ImportIssue':
                     for issue in self[key]:
                         if issue[brick2remove.classname()] and \
-                                issue[brick2remove.classname()][0]['fileLoc'] == brick2remove['fileLoc']:
+                                brick2remove['fileLoc'] in issue[brick2remove.classname()][0]['fileLoc']:
+                                #issue[brick2remove.classname()][0]['fileLoc'] == brick2remove['fileLoc']:
                             new_issue[key].pop(new_issue[key].index(issue))
                             break
                 else:
                     for issue in self[key]:
-                        if os.path.basename(issue['fileLoc']) == os.path.basename(brick2remove['fileLoc']):
+                        if brick2remove['fileLoc'] in issue['fileLoc']:#os.path.basename(issue['fileLoc']) == os.path.basename(brick2remove['fileLoc']):
                             new_issue[key].pop(new_issue[key].index(issue))
                             break
             # elif not key == 'ElectrodeIssue' and (isinstance(brick2remove, Imaging) or

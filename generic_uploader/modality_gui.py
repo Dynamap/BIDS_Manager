@@ -31,6 +31,7 @@ class ModalityGui(QtWidgets.QDialog):
         self.setObjectName("Modality GUI")
         self.setWindowTitle("Modality GUI")
         self.setModal(True)
+        self.flag_emptyroom =False
         '''elements = [element for element in ["session", "modality", "acquisition", "task", "run", "space"]
                     if eval(element)]'''
         elements = keys_dict.keys()
@@ -74,7 +75,7 @@ class ModalityGui(QtWidgets.QDialog):
         # add import button
         self.import_button = QtWidgets.QPushButton(self)
         self.import_button.setEnabled(True)
-        self.import_button.setGeometry(QtCore.QRect(inter_element + (nb_by_line-1)
+        self.import_button.setGeometry(QtCore.QRect(inter_element + (nb_by_line - 1)
                                                     * (largeur_des_elements+inter_element),
                                                     ((nb_line-1)*(2*hauteur_des_elements+inter_element))
                                                     + hauteur_des_elements, largeur_des_elements / 2,
@@ -82,7 +83,21 @@ class ModalityGui(QtWidgets.QDialog):
         self.import_button.setText("Import")
         self.import_button.clicked.connect(self.import_files)
         self.combobox_list = combobox_list
+        if 'meg' in keys_dict['modality']:
+            self.empty_room = QtWidgets.QPushButton(self)
+            self.empty_room.setEnabled(True)
+            self.empty_room.setGeometry(QtCore.QRect(inter_element + (0)
+                                                        * (largeur_des_elements + inter_element),
+                                                        ((nb_line - 1) * (2 * hauteur_des_elements + inter_element))
+                                                        + hauteur_des_elements, largeur_des_elements / 2,
+                                                        hauteur_des_elements))
+            self.empty_room.setText("empty_room")
+            self.empty_room.clicked.connect(self.import_empty_room)
 
     def import_files(self):
         self.accept()
         self.close()
+
+    def import_empty_room(self):
+        self.flag_emptyroom= True
+        self.accept()

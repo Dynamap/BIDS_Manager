@@ -90,6 +90,7 @@ class PatientRequirementsClass(QtWidgets.QDialog):
                 if suj[key]:
                     key_idx = requirements_object_list[i].findText(suj[key])
                     requirements_object_list[i].setCurrentIndex(key_idx)
+            # rajouter les cas particulier ici
             if key == "sex" or key == "age":
                 requirements_object_list[i].setEnabled(False)
             #     sex_idx = requirements_object_list[i].findText(suj[key])

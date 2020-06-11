@@ -23,14 +23,14 @@
 from PyQt5 import QtGui, QtWidgets
 
 
-class MegImportDialog(QtWidgets.QDialog):
+class AnatImportDialog(QtWidgets.QDialog):
     def __init__(self):
         QtWidgets.QDialog.__init__(self)
-        self.setWindowTitle("MEG files or MEG folder ?")
+        self.setWindowTitle("Nifti file or Dicom folder ?")
         self.setMinimumSize(300, 100)
-        files_button = QtWidgets.QPushButton("Files")
+        files_button = QtWidgets.QPushButton("Nifti file")
         files_button.clicked.connect(self.import_files)
-        folder_button = QtWidgets.QPushButton("Folder")
+        folder_button = QtWidgets.QPushButton("Dicom Folder")
         folder_button.clicked.connect(self.import_folder)
         meg_dialog_button = QtWidgets.QDialogButtonBox(self)
         meg_dialog_button.addButton(files_button, meg_dialog_button.YesRole)
@@ -38,9 +38,9 @@ class MegImportDialog(QtWidgets.QDialog):
         self.flag_import = ""
 
     def import_files(self):
-        self.flag_import = "files"
+        self.flag_import = "Nifti file"
         self.accept()
 
     def import_folder(self):
-        self.flag_import = "folder"
+        self.flag_import = "Dicom Folder"
         self.accept()

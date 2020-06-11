@@ -8,6 +8,7 @@ from datetime import datetime
 #variables used in all script
 __modality_type__ = ['ieeg', 'eeg', 'meg', 'beh'] #'anat', 'pet', 'func', 'fmap', 'dwi',
 __channel_name__ = ['channel', 'channels', 'electrode_name', 'electrodes_name', 'electrode_names', 'label', 'labels']
+__file_attr__ = ['ses', 'task', 'acq', 'proc', 'run']
 
 
 def go_throught_dir_to_convert(dirname):
@@ -50,7 +51,7 @@ def go_throught_dir_to_convert(dirname):
     return log_error, tmp_list
 
 
-def parse_derivatives_folder(folder, table2write, table_attributes, folder_out=None, derivatives_folder=None):
+def parse_derivatives_folder(folder, table2write, table_attributes=False, folder_out=None, derivatives_folder=None):
     dev_folder = None
     if derivatives_folder:
         dev_folder = derivatives_folder
@@ -90,30 +91,14 @@ def parse_derivatives_folder(folder, table2write, table_attributes, folder_out=N
 def write_big_table(derivatives_folder, folder_out=None):
     #before write_table
     table2write = [[]]
-    table_attributes = [[]]
-    table_attributes[0] = ['sub']
-    log_error = parse_derivatives_folder(derivatives_folder, table2write, table_attributes, folder_out, derivatives_folder=derivatives_folder)
-    if not len(table2write) == len(table_attributes):
-        print('ERROR')
-    else:
-        final_table = [None] * len(table2write)
-        head_length = len(table2write[0])
-        head_att = len(table_attributes[0])
-        for i in range(0, len(table2write), 1):
-            l_tw = len(table2write[i])
-            l_ta = len(table_attributes[i])
-            if l_tw != head_length:
-                for n in range(l_tw, head_length, 1):
-                    table2write[i].append('n/a')
-            if l_ta != head_att:
-                for n in range(l_ta, head_att, 1):
-                    table_attributes[i].append('n/a')
-            if final_table[i] is None:
-                final_table[i] = []
-            final_table[i].extend(table_attributes[i])
-            final_table[i].extend(table2write[i])
+    log_error = parse_derivatives_folder(derivatives_folder, table2write, table_attributes=True, folder_out=folder_out, derivatives_folder=derivatives_folder)
     filename = 'statistical_table.tsv'
-    write_table(final_table, filename, derivatives_folder)
+    header_len = len(table2write[0])
+    for line in table2write[1::]:
+        if len(line) != header_len:
+            diff_len = header_len-len(line)
+            line.extend(['n/a']*diff_len)
+    write_table(table2write, filename, derivatives_folder)
     return log_error
 
 
@@ -234,7 +219,7 @@ def convert_xls_file(filename):
                             for j in range(0, ncol, 2):
                                 if line[j] and j+1 < ncol:
                                     json_dict[i][line[j]] = line[j+1]
-                #break
+                break
         tsv_dict[i] = tsv_tmp_dict
     if len(tsv_dict.keys()) == 1:
         tsv_dict = tsv_dict[0]
@@ -268,80 +253,77 @@ def read_tsv(filename):
         line = lines.split('\t')
         for key in header:
             idx = header.index(key)
-            tsv_dict[key].append(line[idx])
+            if idx < len(line):
+                tsv_dict[key].append(line[idx])
+            else:
+                tsv_dict[key].append('')
 
     return json_dict, tsv_dict
 
 
-def create_table(tsv_dict, channel, key2remove, table2write, header_real_val=None, table_attributes=None, file=None, soft_analysis=None):
+def create_table(tsv_dict, channel, key2remove, table2write, header_real_val=None, table_attributes=False, file=None, soft_analysis=None):
+    header_tsv = []
     if header_real_val is None:
         header_real_val = {'header': table2write[0]}
     name = {}
-    id_same_file = None
     if soft_analysis:
         soft = soft_analysis + '_'
     else:
         soft = ''
     if 'Channel' not in header_real_val['header']:
         header_real_val['header'].insert(0, 'Channel')
-    for key in tsv_dict:
-        if key not in key2remove and soft + key.replace(' ', '_') not in header_real_val['header'] and len(tsv_dict[key]) == len(channel) and key != '':
-            new_key = soft + key.replace(' ', '_')
-            header_real_val['header'].append(new_key)
-            header_real_val[new_key] = key
-        # create_attributes_table
     if table_attributes:
+        if 'sub' not in header_real_val['header']:
+            header_real_val['header'].insert(0, 'sub')
         name_list = os.path.basename(file).split('_')
         name = {elt.split('-')[0]: elt.split('-')[1] for elt in name_list if '-' in elt}
-        headatt = table_attributes[0]
-        for key in name:
-            if key not in headatt:
-                headatt.append(key)
-        lines_att = ['n/a'] * len(headatt)
-        for key in headatt:
-            ida = headatt.index(key)
-            if key in name:
-                lines_att[ida] = name[key]
-        if lines_att in table_attributes:
-            id_same_file = table_attributes.index(lines_att)
+        col_attr = [name[nm] for nm in name if nm in __file_attr__]
+        key_attr = '_'.join(col_attr)
+    for key in tsv_dict:
+        if table_attributes:
+            key2write = key_attr + '_' + key.replace(' ', '_')
+        else:
+            key2write = key.replace(' ', '_')
+        if key not in key2remove and soft + key2write not in header_real_val['header'] and len(tsv_dict[key]) == len(channel) and key != '':
+            new_key = soft + key2write
+            header_real_val['header'].append(new_key)
+            header_real_val[new_key] = {'infile':key, 'softname':soft}
+
+        header_tsv.append(soft + key2write)
+        # create_attributes_table
     for i in range(0, len(channel), 1):
         chan = channel[i]
         id_chan = header_real_val['header'].index('Channel')
         flag_not_inside = True
         lines = None
-        if id_same_file is not None:
-            for j in range(id_same_file, id_same_file + len(channel), 1):
-                if table2write[j][id_chan] == chan:
-                    lines = table2write[j]
-                    flag_not_inside = False
-                    break
-            if lines is None:
-                flag_not_inside = True
+        if table_attributes:
+            id_sub = header_real_val['header'].index('sub')
+            idx = [cnt for cnt, l in enumerate(table2write) if l[id_sub] == name['sub'] and l[id_chan] == chan]
+            if idx:
+                flag_not_inside = False
+                lines = table2write[idx[0]]
+                if len(lines) != len(header_real_val['header']):
+                    for n in range(len(lines), len(header_real_val['header']), 1):
+                        lines.append('n/a')
+            else:
                 lines = ['n/a'] * len(header_real_val['header'])
-                #table_attributes.append(lines_att)
-            elif len(lines) != len(header_real_val['header']):
-                for n in range(len(lines), len(header_real_val['header']), 1):
-                    lines.append('n/a')
         else:
             lines = ['n/a'] * len(header_real_val['header'])
         for key in header_real_val['header']:
             idx = header_real_val['header'].index(key)
-            if key in header_real_val:
-                key_sub = header_real_val[key]
-            elif key == 'Channel':
-                key_sub = key
-            else:
+            try:
+                if key in header_real_val and key in header_tsv:
+                    lines[idx] = str(tsv_dict[header_real_val[key]['infile']][i])
+                elif key == 'Channel' and lines[idx] == 'n/a':
+                    lines[idx] = chan
+                elif key in name.keys() and lines[idx] == 'n/a':
+                    lines[idx] = str(name[key])
+                else:
+                    continue
+            except:
                 continue
-            if key_sub in tsv_dict.keys():
-                lines[idx] = str(tsv_dict[key_sub][i])
-            elif key_sub in name.keys():
-                lines[idx] = str(name[key_sub])
-            elif key == 'Channel':
-                lines[idx] = chan
         if flag_not_inside:
             table2write.append(lines)
-            if table_attributes:
-                table_attributes.append(lines_att)
 
     return header_real_val
 

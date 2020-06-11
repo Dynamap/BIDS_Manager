@@ -65,7 +65,7 @@ class DerivativesSetting(object):
             variant_list = []
             it_exist = False
             for pip in pip_list:
-                if pip.startswith(pip_name):
+                if pip.startswith(pip_name.lower()):
                     # variant = pip.split('-')
                     # if len(variant) > 1:
                     #     variant_list.append(variant[1:])
@@ -297,7 +297,8 @@ class DatasetDescPipeline(bids.DatasetDescJSON):
             if key in self['SourceDataset'].keys():
                 if isinstance(subject_list[key], dict):
                     for elt in subject_list[key]:
-                        elt_not_in.append(any(el not in self['SourceDataset'][key][elt] for el in subject_list[key][elt]))
+                        if elt in self['SourceDataset'][key]:
+                            elt_not_in.append(any(el not in self['SourceDataset'][key][elt] for el in subject_list[key][elt]))
                 else:
                     sub_not_in.append(all(elt not in self['SourceDataset'][key] for elt in subject_list[key]))
             else:
@@ -321,7 +322,10 @@ class DatasetDescPipeline(bids.DatasetDescJSON):
             elif isinstance(subject2add[elt], dict):
                 if elt in self['SourceDataset'].keys():
                     for clef in subject2add[elt]:
-                        self['SourceDataset'][elt][clef].extend(subject2add[elt][clef])
+                        if clef in self['SourceDataset'][elt]:
+                            self['SourceDataset'][elt][clef].extend(subject2add[elt][clef])
+                        else:
+                            self['SourceDataset'][elt][clef] = subject2add[elt][clef]
                         self['SourceDataset'][elt][clef] = list(set(self['SourceDataset'][elt][clef]))
 
 
@@ -430,6 +434,21 @@ class PipelineSetting(dict):
                         use_list.append(elt)
             return use_list
 
+        def anywave_constraint(order, idx_in, in_out):
+            in_idx = list(idx_in.keys())[0]
+            order_key = list(order.keys())
+            if '--output_file' in order or '--output_prefix' in order:
+                pref_tag = [elt for elt in order if elt in ['--output_prefix', '--output_file']][0]
+                if not in_out[order[pref_tag]]:
+                    in_out[order[pref_tag]] = []
+                    for file in in_out[in_idx]:
+                        if "c,rfDC" in file:
+                            file = os.path.dirname(file)
+                        dirname, filename = os.path.split(file)
+                        file_elt = filename.split('_')
+                        new_file = '_'.join(file_elt[0:len(file_elt)-1])
+                        in_out[order[pref_tag]].append(new_file)
+
         param_vars = results['analysis_param']
         output_name = ''
         try:
@@ -472,10 +491,13 @@ class PipelineSetting(dict):
             self.log_error += cmd_arg.verify_log_for_errors('', error_proc)
             self.write_json_associated(order, output_directory, cmd_arg)
         elif order:
-            taille, idx_in, in_out = input_dict.get_input_values(subject_to_analyse, order)
+            taille, idx_in, in_out, err_input = input_dict.get_input_values(subject_to_analyse, order)
+            self.log_error += err_input
             if output_dict:
                 output_dict.get_output_values(in_out, taille, order, output_directory, idx_in)  # sub
             for sub in in_out:
+                ##To take into account the prefix and suffix in AnyWave
+                anywave_constraint(order, idx_in, in_out[sub])
                 idx = 0
                 log_error = []
                 while idx < taille[sub]:
@@ -547,10 +569,12 @@ class PipelineSetting(dict):
             if isinstance(self['Parameters'][key], Arguments):
                 self['Parameters'][key].command_arg(key, cmd_arg, subject_to_analyse)
             elif key == 'Input':
-                input_p = self['Parameters'][key]
+                input_p = Input()
+                input_p.copy_values(self['Parameters'][key])
                 cmd_arg['Input'] = ''
             elif key == 'Output':
-                output_p = self['Parameters'][key]
+                output_p = Output()
+                output_p.copy_values(self['Parameters'][key])
                 output_p.bids_directory = self.cwdir
                 cmd_arg['Output'] = ''
 
@@ -783,6 +807,8 @@ class Parameters(dict):
                             type_value.extend(subject_list[clef][self['type']])
                 if type_value:
                     cmd_dict[key] = type_value
+                elif type_value is None and self['type'] == 'file':
+                    cmd_dict[key] = ''
 
     def command_line_base(self, cmd_line_set, mode, output_directory, input_p, output_p):
         if not cmd_line_set:
@@ -907,11 +933,23 @@ class AnyWave(Parameters):
 
     def chaine_parameters(self, output_directory, input_dict, output_dict):
         jsonfilename = os.path.join(self.derivatives_directory, self['plugin'] + '_parameters' + '.json')
+        pref_flag = False
+        suff_flag = False
 
         if 'Input' in self.keys():
             del self['Input']
         if 'Output' in self.keys():
             del self['Output']
+        if 'output_prefix' in self.keys() or 'output_file' in self.keys():
+            if 'output_prefix' in self.keys():
+                pref_tag = '--output_prefix'
+            else:
+                pref_tag = '--output_file'
+            pref_flag = True
+            del self[pref_tag.replace('--', '')]
+        if 'output_suffix' in self.keys():
+            suff_flag = True
+            del self['output_suffix']
         with open(jsonfilename, 'w') as json_file:
             if 'modality' in self and isinstance(self['modality'], list):
                 self['modality'] = self['modality'][-1]
@@ -956,7 +994,14 @@ class AnyWave(Parameters):
                     order[output_dict['tag']] = cnt_tot
                 cmd_line += ' ' + output_dict['tag'] + ' {' + str(cnt_tot) + '}'
                 cnt_tot += 1
-
+        if pref_flag:
+            order[pref_tag] = cnt_tot
+            cmd_line += ' ' + pref_tag + ' {' + str(cnt_tot) + '}'
+            cnt_tot += 1
+        if suff_flag:
+            order['--output_suffix'] = cnt_tot
+            cmd_line += ' --output_suffix {' + str(cnt_tot) + '}'
+            cnt_tot += 1
         return cmd_line, order
 
     def verify_log_for_errors(self, input, x=None):
@@ -966,20 +1011,25 @@ class AnyWave(Parameters):
         if getpass.getuser() == 'jegou':
             self.anywave_directory = r'Z:\AnyWave\Log'
         else:
-            self.anywave_directory = os.path.join(home, 'Documents', 'AnyWave', 'Log')
+            self.anywave_directory = os.path.join(home, 'AnyWave', 'Log')
+            if not os.path.exists(self.anywave_directory):
+                self.anywave_directory = os.path.join('\\dynaserv', 'home', getpass.getuser(), 'AnyWave', 'Log')
         temp_time = 0
         filename =''
-        with os.scandir(self.anywave_directory) as it:
-            for entry in it:
-                time_file = os.path.getctime(entry)
-                if time_file > temp_time:
-                    temp_time = time_file
-                    filename = entry.path
-        f = open(filename, 'r')
-        f_cont = f.readlines()
-        for elt in f_cont:
-            log_error += elt
-        f.close()
+        if os.path.exists(self.anywave_directory):
+            with os.scandir(self.anywave_directory) as it:
+                for entry in it:
+                    time_file = os.path.getctime(entry)
+                    if time_file > temp_time:
+                        temp_time = time_file
+                        filename = entry.path
+            f = open(filename, 'r')
+            f_cont = f.readlines()
+            for elt in f_cont:
+                log_error += elt
+            f.close()
+        else:
+            log_error += 'The AnyWave log path was not found.\n'
 
         return log_error
 
@@ -1104,16 +1154,16 @@ class Matlab(Parameters):
                     cmd_line.append("'{" + str(cnt_tot) + "}'")
                     cnt_tot += 1
             elif isinstance(self[clef], list):
-                cmd_line.append(" '"+clef+"'")
+                cmd_line.append("'"+clef+"'")
                 value = ', '.join(self[clef])
                 cmd_line.append("'" + value + "'")
             elif isinstance(self[clef], int) or isinstance(self[clef], float):
-                cmd_line.append(" '"+clef+"'")
+                cmd_line.append("'"+clef+"'")
                 if isinstance(self[clef], bool):
                     self[clef] = int(self[clef])
                 cmd_line.append(self[clef])
             else:
-                cmd_line.append(" '" + clef + "'")
+                cmd_line.append("'" + clef + "'")
                 if self[clef].isnumeric():
                     self[clef] = int(self[clef])
                     cmd_line.append(self[clef])
@@ -1208,15 +1258,37 @@ class Input(ParametersSide):
     def get_input_values(self, subject_to_analyse, order):
         def compare_length_multi_input(in_out, idx_in):
             err = ''
+            nbr_in = None
             for i in range(0, len(idx_in)-1):
                 if len(in_out[i]) != len(in_out[i+1]):
-                    'ERROR: The elements in the list don"t have the same size'
-            return err
+                    err += 'ERROR: The elements in the list don"t have the same size.\n'
+            if not err:
+                nbr_in = len(in_out[0])
+            return err, nbr_in
+
+        def reorder_inputs(in_out, idx_in):
+            if all(idx_in[elt]=='file' for elt in idx_in):
+                idx_list = list(idx_in.keys())
+                tmp_dict = {idx: {} for idx in idx_list[1:]}
+                for cnt, file in enumerate(in_out[idx_list[0]]):
+                    file_split = file.split('_')
+                    val_ind = {elt: val for elt in SubjectToAnalyse.keylist for val in file_split if val.startswith(elt+'-')}
+                    for id in idx_list[1:]:
+                        val_diff = [val_ind[key] for key in val_ind if not all(val_ind[key] in subfile for subfile in in_out[id])]
+                        if val_diff:
+                            new_file = [flist for flist in in_out[id] if all(val in flist for val in val_diff)]
+                            if new_file and len(new_file) ==1:
+                                tmp_dict[id][cnt] = new_file[0]
+                for id in tmp_dict:
+                    for ct in tmp_dict[id]:
+                        in_out[id][ct] = tmp_dict[id][ct]
 
         in_out = {clef: ['']*len(order) for clef in subject_to_analyse['sub']}
         temp = {clef: 0 for clef in subject_to_analyse['sub']}
         order_tag = [tag for tag in order]
-        idx_in = []
+        input_att = {'Input_'+tag: {} for tag in order_tag}
+        idx_in = {}
+        error_in = ''
         for cn, elt in enumerate(self):
             not_inside = False
             tag_val = elt['tag']
@@ -1227,21 +1299,39 @@ class Input(ParametersSide):
             else:
                 idx = order[tag_val]
             if not not_inside:
-                elt.get_input_values(subject_to_analyse, in_out, idx, order_tag[idx])
+                input_att['Input_' + tag_val] = elt.get_input_values(subject_to_analyse, in_out, idx, order_tag[idx])
                 # if temp:
                 #     if temp != len(in_out[idx]):
                 #         raise ValueError('The elements in the list don"t have the same size')
                 # else:
                 #     temp = len(in_out[idx])
-                idx_in.append(idx)
+                idx_in[idx] = elt['type']
+        sub_to_delete = []
         for sub in in_out:
             if len(idx_in) > 1:
-                error = compare_length_multi_input(in_out[sub], idx_in)
+                error, nbr_in = compare_length_multi_input(in_out[sub], idx_in)
                 if error:
-                    raise ValueError(error)
-            temp[sub] = len(in_out[sub][idx_in[0]])
-
-        return temp, idx_in, in_out
+                    sub_to_delete.append(sub)
+                    error_in += error
+                    error_in += 'The subject {} won"t be analysed because there is not the same length of inputs.\n'.format(sub)
+                else:
+                    reorder_inputs(in_out[sub], idx_in)
+            else:
+                nbr_in = len(in_out[sub][idx])
+            temp[sub] = nbr_in
+        for sub in sub_to_delete:
+            del in_out[sub]
+        for inp in input_att:
+            for sub in input_att[inp]:
+                if sub not in sub_to_delete:
+                    for key, val in input_att[inp][sub].items():
+                        try:
+                            subject_to_analyse[inp][key].extend(val)
+                        except:
+                            subject_to_analyse[inp][key] = val
+                        subject_to_analyse[inp][key] = list(set(subject_to_analyse[inp][key]))
+                        subject_to_analyse[inp][key].sort()
+        return temp, idx_in, in_out, error_in
 
 
 class InputArguments(Parameters):
@@ -1266,7 +1356,10 @@ class InputArguments(Parameters):
                         value = [elt.capitalize() for elt in input_dict[key]]
                         self[key] = value
                 elif key == 'deriv-folder':
-                    self[key] = input_dict[key]
+                    if isinstance(input_dict[key], str):
+                        self[key] = [input_dict[key]]
+                    else:
+                        self[key] = input_dict[key]
                     self.deriv_input = True
                 else:
                     self[key] = input_dict[key]
@@ -1288,6 +1381,7 @@ class InputArguments(Parameters):
                 del chemin[-1]
                 return check_dir_existence(bids_directory, chemin)
 
+        input_att = {sub: {} for sub in subject_to_analyse['sub']}
         if self.deriv_input: #'deriv-folder' in self.keys():
             if self['deriv-folder'] and self['deriv-folder'] != ['']:
                 self.curr_bids.is_pipeline_present(self['deriv-folder'][0])
@@ -1302,7 +1396,7 @@ class InputArguments(Parameters):
                 raise ValueError('You have to select a derivatives folder for the input {}'.format(tag))
         if self['type'] == 'file':
             for sub in subject_to_analyse['sub']:
-                in_out[sub][idx] = self.get_subject_files(subject_to_analyse['Input_'+tag], sub)
+                in_out[sub][idx], input_att[sub] = self.get_subject_files(subject_to_analyse['Input_'+tag], sub)
         elif self['type'] == 'dir':
             path_key = {key: '' for key in self.path_key}
             for key in path_key:
@@ -1329,9 +1423,11 @@ class InputArguments(Parameters):
                     #     break
                 #check the existence of the directory
                 in_out[sub][idx] = [check_dir_existence(self.bids_directory, chemin)]
+        return input_att
 
     def get_subject_files(self, subject, sub_id, deriv_reader=None):#, modality, subject_list, curr_bids):
         input_files = []
+        temp_att = {}
         if 'modality' not in subject.keys():
             subject['modality'] = self['modality']
         # modality = [elt for elt in bids.ModalityType.get_list_subclasses_names() if elt in subject['modality']]
@@ -1364,6 +1460,12 @@ class InputArguments(Parameters):
                                 #     else:
                                 #         is_equal.append(False)
                             if all(is_equal) and elt['fileLoc'].endswith(self['filetype']):
+                                key_attributes = [clef for clef in SubjectToAnalyse.keylist if not clef == 'modality']
+                                for key in key_attributes:
+                                    if key in elt and elt[key] and key not in temp_att:
+                                        temp_att[key] = [elt[key]]
+                                    elif key in elt and elt[key] and elt[key] not in temp_att[key]:
+                                        temp_att[key].append(elt[key])
                                 input_files.append(os.path.join(self.bids_directory, elt['fileLoc']))
         else:
             for sub in self.curr_bids['Subject']:
@@ -1384,11 +1486,17 @@ class InputArguments(Parameters):
                                 else:
                                     is_equal.append(False)
                             if all(is_equal):
+                                key_attributes = [clef for clef in SubjectToAnalyse.keylist if not clef == 'modality']
+                                for key in key_attributes:
+                                    if key in elt and elt[key] and key not in temp_att:
+                                        temp_att[key] = [elt[key]]
+                                    elif key in elt and elt[key] and elt[key] not in temp_att[key]:
+                                        temp_att[key].append(elt[key])
                                 input_files.append(os.path.join(self.bids_directory, elt['fileLoc']))
                                 if mod == 'Meg' and os.path.isdir(input_files[-1]):
                                     input_files[-1] = os.path.join(input_files[-1], 'c,rfDC')
-
-        return input_files
+        #subject.update(temp_att)
+        return input_files, temp_att
 
 
 class Output(Parameters):
@@ -1400,7 +1508,7 @@ class Output(Parameters):
         if not keys == self.keylist and not flag_process:
             raise KeyError('Your json is not conform')
         else:
-            if (input_dict['type'] == 'dir' and  not input_dict['directory']) or (input_dict['type'] == 'file' and input_dict['directory']):
+            if (input_dict['type'] == 'dir' and not input_dict['directory']) or (input_dict['type'] == 'file' and input_dict['directory']):
                 raise KeyError('The output in your json is not conform due to the type.\n You mention directory: {0} and type: {1}.\n'.format(input_dict['directory'], input_dict['type']))
             for key in keys:
                 self[key] = input_dict[key]
@@ -1415,6 +1523,8 @@ class Output(Parameters):
             out_file = []
             soft_name = os.path.basename(output_dir).lower()
             soft_name = soft_name.split('-v')[0]
+            if "c,rfDC" in filename:
+                filename = os.path.dirname(filename)
             dirname, filename = os.path.split(filename)
             trash, dirname = dirname.split(bids_directory + '\\')
             if 'derivatives' in dirname:
@@ -1439,6 +1549,8 @@ class Output(Parameters):
         def create_output_sub_dir(output_dir, filename, bids_directory):
             if os.path.isfile(filename) or (os.path.isdir(filename) and filename.endswith('meg')):
                 dirname, filename = os.path.split(filename)
+                if dirname.endswith('_meg'):
+                    dirname = os.path.dirname(dirname)
                 trash, dirname = dirname.split(bids_directory + '\\')
             else:
                 trash, dirname = filename.split(bids_directory+'\\')
@@ -1460,7 +1572,8 @@ class Output(Parameters):
                 else:
                     for sub in in_out:
                         output_files = []
-                        for filename in in_out[sub][idx_in[0]]:
+                        idx_list = list(idx_in.keys())
+                        for filename in in_out[sub][idx_list[0]]:
                             out_file = create_output_file(output_directory, filename, self['extension'], self.bids_directory)
                             output_files.append(out_file)
                         in_out[sub][idx] = output_files
@@ -1475,7 +1588,8 @@ class Output(Parameters):
             else:
                 for sub in in_out:
                     output_files = []
-                    for filename in in_out[sub][idx_in[0]]:
+                    idx_list = list(idx_in.keys())
+                    for filename in in_out[sub][idx_list[0]]:
                         output_dir = create_output_sub_dir(output_directory, filename, self.bids_directory)
                         output_files.append(output_dir)
                     in_out[sub][idx] = output_files

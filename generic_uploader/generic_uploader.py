@@ -40,10 +40,11 @@ except:
     if any(elt.startswith('PyQt5-') for elt in lib_list) and any(elt.startswith('PyQt5_sip') for elt in lib_list):
         pyqt_path = [elt for elt in lib_list if elt.startswith('PyQt5-')]
         sip_path = [elt for elt in lib_list if elt.startswith('PyQt5_sip')]
-        for file in os.listdir(os.path.join(lib_path[0], sip_path[0], 'PyQt5')):
-            if file.startswith('sip') and file.endswith('.pyd'):
-                shutil.copy(os.path.join(lib_path[0], sip_path[0], 'PyQt5', file), os.path.join(lib_path[0], pyqt_path[0], 'PyQt5'))
-                from PyQt5 import QtGui, QtCore, QtWidgets
+        if sip_path and lib_path:
+            for file in os.listdir(os.path.join(lib_path[0], sip_path[0], 'PyQt5')):
+                if file.startswith('sip') and file.endswith('.pyd'):
+                    shutil.copy(os.path.join(lib_path[0], sip_path[0], 'PyQt5', file), os.path.join(lib_path[0], pyqt_path[0], 'PyQt5'))
+                    from PyQt5 import QtGui, QtCore, QtWidgets
 from generic_uploader.generic_uploaderUI import Ui_MainWindow
 from generic_uploader.validationdialog import Ui_Dialog
 from generic_uploader.micromed import anonymize_micromed
@@ -55,6 +56,7 @@ from bids_manager import ins_bids_class
 from generic_uploader import patient_requirements_class
 from generic_uploader.modality_gui import ModalityGui
 from generic_uploader.import_by_modality import import_by_modality
+from generic_uploader.empty_room_dialog import EmptyRoomImportDialog
 
 if 0:  # Used to compile, otherwise, it crashes
     pass
@@ -284,7 +286,7 @@ class GenericUploader(QtWidgets.QMainWindow, Ui_MainWindow):
         self.setupUi(self)
         self.progressBar.setVisible(False)
         self.progressBar.setValue(0)
-        self.generic_uploader_version = str(1.03)
+        self.generic_uploader_version = str(1.04)
         self.setWindowTitle("BIDSUploader v" + self.generic_uploader_version)
         self.MenuList = self.ListMenuObject(self)
         self.listWidget.clear()
@@ -355,6 +357,7 @@ class GenericUploader(QtWidgets.QMainWindow, Ui_MainWindow):
         self.maplist = []
         self.listWidget.clear()
         if not sub['sub']:
+            QtWidgets.QMessageBox.critical(self, "subject id is empty")
             return "Pas de sujet"
         # self.maplist.append({"Modality": "", "ID": sub["sub"], "Protocole : ": self.protocole1_name.toPlainText(),
         #                      "curr_state": "invalid"})
@@ -609,8 +612,9 @@ class GenericUploader(QtWidgets.QMainWindow, Ui_MainWindow):
             today = datetime.date.today()
             age = today.year - born_datetime.year - (
                     (today.month, today.day) < (born_datetime.month, born_datetime.day))
+            birth_date = str(born_datetime.day) + '/' + str(born_datetime).split('-')[1] + '/' + str(born_datetime.year)
             if age > 3:
-                return str(age)
+                return str(age), birth_date
             else:
                 if today.month >= born_datetime.month and today.day >= born_datetime.day:
                     month = today.month - born_datetime.month
@@ -620,7 +624,8 @@ class GenericUploader(QtWidgets.QMainWindow, Ui_MainWindow):
                     month = 12 - abs(today.month - born_datetime.month)
                 elif today.month < born_datetime.month and today.day < born_datetime.day:
                     month = 12 - abs(today.month - born_datetime.month) - 1
-                return str(age) + "," + str(month)
+                generic_age = str(age) + "," + str(month)
+                return generic_age, birth_date
 
         def valide_mot(mot):
             nfkd_form = unicodedata.normalize('NFKD', mot)
@@ -659,16 +664,22 @@ class GenericUploader(QtWidgets.QMainWindow, Ui_MainWindow):
                 graine = last_name_validated + first_name_validated + birth_date_validated + self.secret_key
                 hashed = hash_object(graine)
             else:
-                alternative_id = str(self.id_textbox.toPlainText())
+                alternative_id = str(self.id_textbox.toPlainText()).lower()
+                last_name_validated = last_name_validated.lower()
+                first_name_validated = first_name_validated.lower()
                 if not alternative_id:
                     hashed = last_name_validated + first_name_validated
                 else:
                     hashed = alternative_id
             return hashed, last_name_validated, first_name_validated
 
-        def creation_sujet_bids(sub_required_keys, id, date, sex, protocole, *args):
-            subj_age = calculate_age(date)
-            sub_id_dict_list = [{'sub': id}, {'age': subj_age}, {'sex': sex}]
+        def creation_sujet_bids(sub_required_keys, id, date, sex, protocole, last_name, first_name, *args):
+            subj_age, birth_date = calculate_age(date)
+            sub_id_dict_list = [{'sub': id}, {'age': subj_age}, {'date_de_naissance': birth_date},
+                                {'birth_date': birth_date}, {'sex': sex}, {'sexe': sex}, {'gender': sex},
+                                {'last_name': last_name}, {'first_name': first_name},
+                                {'lastname': last_name}, {'firstname': first_name},
+                                {'nom': last_name}, {'prenom': first_name}]
             if not args:
                 current_subject = ins_bids_class.Subject()
                 # current_subject.keys()
@@ -682,7 +693,7 @@ class GenericUploader(QtWidgets.QMainWindow, Ui_MainWindow):
                 # gérer ici si déjà existant
                 for sub in args:
                     # sub.update({'sub': ID, 'age': Age, 'sex': sex, 'eCRF': protocole})
-                    # sub.update({'sub': id, 'age': subj_age, 'sex': sex})
+                    sub.update({'sub': id})
                     for id_dict in sub_id_dict_list:
                         if list(id_dict.keys())[0] in sub_required_keys:
                             sub.update({list(id_dict.keys())[0]: list(id_dict.values())[0]})
@@ -705,8 +716,9 @@ class GenericUploader(QtWidgets.QMainWindow, Ui_MainWindow):
         except :
             self.restart_groupbox_identite()
             return
-        self.TextName.setPlainText(last_name_valid.lower())
-        self.TextPrenom.setPlainText(first_name_valid.lower())
+        self.TextName.setPlainText(last_name_valid)
+        self.TextPrenom.setPlainText(first_name_valid)
+        self.id_textbox.setPlainText(self.ID)
         if (self.radioButtonM.isChecked() or self.radioButtonF.isChecked()) and str(
                 self.TextName.toPlainText()) != "" \
                 and self.TextPrenom.toPlainText() != "":
@@ -725,14 +737,19 @@ class GenericUploader(QtWidgets.QMainWindow, Ui_MainWindow):
             self.restart_groupbox_identite()
             return 0
         self.Sex = sexe
-        # regarder ici si plusieurs protocoles ou pas
+        # modif sam pour prise en compte des keys and not only required_keys
+        sub_required_keys = self.requirements['Requirements']['Subject']['keys']
         if not self.Subject:
-            sub_required_keys = self.requirements.required_keys
-            self.Subject = creation_sujet_bids(sub_required_keys, self.ID, birth_date, sexe, str(self.proto_name))
-        else:
-            sub_required_keys = self.requirements.required_keys
-            self.Subject = creation_sujet_bids(sub_required_keys, self.ID, birth_date, sexe, str(self.proto_name),
-                                               self.Subject)
+            #sub_required_keys = self.requirements.required_keys
+            # creation du sujet
+            self.Subject = ins_bids_class.Subject()
+            # self.Subject = creation_sujet_bids(sub_required_keys, self.ID, birth_date, sexe, str(self.proto_name))
+        # else:
+            #sub_required_keys = self.requirements.required_keys
+            # self.Subject = creation_sujet_bids(sub_required_keys, self.ID, birth_date, sexe, str(self.proto_name),
+            #                                    self.Subject)
+        self.Subject = creation_sujet_bids(sub_required_keys, self.ID, birth_date, sexe, str(self.proto_name),
+                                           last_name_valid, first_name_valid, self.Subject)
         suj = self.Subject
         # self.mapping_subject2list(suj)
         # Enabler les différents comboBox et afficher dans listWidget
@@ -946,6 +963,19 @@ class GenericUploader(QtWidgets.QMainWindow, Ui_MainWindow):
         res = modality_gui.exec_()
         if res == 0:
             return 0
+        # si MEG nouvelle gui pour empty room
+        if modality_gui.flag_emptyroom:
+            empty_room_dial = EmptyRoomImportDialog()
+            res = empty_room_dial.exec()
+            if res == 0:
+                return 0
+            modality_gui.combobox_list = []
+            modality_gui.combobox_list.append(QtWidgets.QComboBox(self))
+            modality_gui.combobox_list[-1].setObjectName('ses')
+            modality_gui.combobox_list[-1].addItems([empty_room_dial.ses])
+            modality_gui.combobox_list.append(QtWidgets.QComboBox(self))
+            modality_gui.combobox_list[-1].setObjectName('task')
+            modality_gui.combobox_list[-1].addItems([empty_room_dial.task])
         try:
             sub, curr_keys_dict = import_by_modality(self, modality, modality_gui, self.Subject)
         except Exception as e:
@@ -1298,22 +1328,27 @@ class GenericUploader(QtWidgets.QMainWindow, Ui_MainWindow):
         def validation_neuroimagerie(suj, map_line, action_number, key):
             if str(self.maplist[action_number]["curr_state"]) not in ["valid", "forced"]:
                 data_path = os.path.join(self.current_working_path, suj[key][map_line["Index"]]["fileLoc"])
-                list_files = os.listdir(data_path)
-                if suj[key][map_line["Index"]]["modality"]:
+                #list_files = os.listdir(data_path)
+                #if os.path.isdir(data_path) and [key][map_line["Index"]]["modality"]:
+                if os.path.isdir(data_path) and suj[key][map_line["Index"]]:
                     [nom, prenom, date] = self.recursively_read_imagery_folder(data_path)
                     if nom == prenom == date == 0:
                         return 0
-                    birthdate = self.birth_date_str[0:2] + self.birth_date_str[3:5] + self.birth_date_str[6:10]
-                    if nom.lower().rstrip('\x00') != str(self.TextName.toPlainText()).lower() or prenom.lower().rstrip(
-                            '\x00') != str(self.TextPrenom.toPlainText()).lower() or date.lower() != birthdate:
-                        self.listWidget.item(action_number).setForeground(QtGui.QColor("red"))
-                        self.listWidget.item(action_number).setText(self.listWidget.item(
-                            action_number).text() + " => given identity and informations in files are different !")
-                        self.maplist[action_number]["curr_state"] = "invalid"
-                    else:
-                        self.listWidget.item(action_number).setForeground(QtGui.QColor("green"))
-                        self.maplist[action_number]["curr_state"] = "valid"
-                    return self.maplist[action_number]["curr_state"]
+                elif os.path.isfile(data_path) and suj[key][map_line["Index"]]:
+                    [nom, prenom, date] = read_headers(data_path)
+                    if nom == prenom == date == 0:
+                        return 0
+                else:
+                    self.listWidget.item(action_number).setForeground(QtGui.QColor("green"))
+                    self.maplist[action_number]["curr_state"] = "valid"
+                return self.maplist[action_number]["curr_state"]
+                birthdate = self.birth_date_str[0:2] + self.birth_date_str[3:5] + self.birth_date_str[6:10]
+                if nom.lower().rstrip('\x00') != str(self.TextName.toPlainText()).lower() or prenom.lower().rstrip(
+                        '\x00') != str(self.TextPrenom.toPlainText()).lower() or date.lower() != birthdate:
+                    self.listWidget.item(action_number).setForeground(QtGui.QColor("red"))
+                    self.listWidget.item(action_number).setText(self.listWidget.item(
+                        action_number).text() + " => given identity and informations in files are different !")
+                    self.maplist[action_number]["curr_state"] = "invalid"
                 else:
                     self.listWidget.item(action_number).setForeground(QtGui.QColor("green"))
                     self.maplist[action_number]["curr_state"] = "valid"
@@ -1429,7 +1464,8 @@ class GenericUploader(QtWidgets.QMainWindow, Ui_MainWindow):
             # if classe in ["Anat", "Dwi", "Func"]:
             if classe not in ins_bids_class.GlobalSidecars.get_list_subclasses_names():
                 tmp_modality = getattr(ins_bids_class, classe)()
-                if isinstance(tmp_modality, ins_bids_class.Imaging) or os.path.isdir(src_path):
+                #if isinstance(tmp_modality, ins_bids_class.Imaging) or os.path.isdir(src_path):
+                if os.path.isdir(src_path):
                     foldername_list = [sujet[classe][idx][notempty] for notempty in sujet[classe][idx].keys()
                                        if (sujet[classe][idx][notempty] and notempty != "fileLoc" and notempty != "sub")]
                     foldername = ""
@@ -1464,7 +1500,7 @@ class GenericUploader(QtWidgets.QMainWindow, Ui_MainWindow):
                 #    dest_filename = os.path.join(temp_path, acq)
                 #    dest4data2import = acq
                 # elif classe in ["Ieeg", "Meg", "Eeg"]:
-                elif isinstance(tmp_modality, ins_bids_class.Electrophy):
+                elif isinstance(tmp_modality, ins_bids_class.Electrophy) or os.path.isfile(src_path):
                     dest_filename = os.path.join(temp_path, filename + file_extension)
                     dest4data2import = filename + file_extension
                 # elif classe == "IeegGlobalSidecars":
@@ -1507,10 +1543,12 @@ class GenericUploader(QtWidgets.QMainWindow, Ui_MainWindow):
             elif classe in ["Anat", "Dwi", "Func"]:
                 try:
                     anonymize_dcm(dest_filename, dest_filename, sub_id, sub_id, True, False)
-                except:
                     # suppression pour ne garder que les Dicoms
-                    os.remove(dest_filename)
-                    return
+                    # os.remove(dest_filename)
+                    # return
+                except :
+                    print('')
+                    # anonymiser aussi les niftii ici
 
         def local_copy_and_anonymization(file_class, src, dest, sub_id, *modality):
             if os.path.isdir(src):

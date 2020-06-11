@@ -127,7 +127,7 @@ class Ui_MainWindow(object):
         # ajout du champ pour alias si non anonymisé
         self.id_textinfo = QtWidgets.QLabel(self.groupBox_identite)
         self.id_textinfo.setVisible(False)
-        self.id_textinfo.setMaximumSize(QtCore.QSize(300, 25))
+        self.id_textinfo.setMaximumSize(QtCore.QSize(300, 30))
         font = QtGui.QFont()
         font.setFamily(_fromUtf8("Segoe UI"))
         # font.setBold(True)
@@ -138,7 +138,7 @@ class Ui_MainWindow(object):
         self.gridLayout_5.addWidget(self.id_textinfo, 3, 2, 1, 2)
         self.id_textbox = QtWidgets.QPlainTextEdit(self.groupBox_identite)
         self.id_textbox.setVisible(False)
-        self.id_textbox.setMaximumSize(QtCore.QSize(350, 30))
+        self.id_textbox.setMaximumSize(QtCore.QSize(350, 35))
         font = QtGui.QFont()
         font.setFamily(_fromUtf8("Segoe UI"))
         font.setPointSize(10)
