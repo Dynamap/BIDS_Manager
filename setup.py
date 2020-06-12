@@ -17,7 +17,10 @@ setup(
     install_requires=[
         'PyQt5',
         'pydicom',
-        'bids_validator'
+        'bids_validator',
+        'scipy',
+        'xlrd',
+        'nibabel'
     ],
     include_package_data=True,
     entry_points={'console_scripts': ['bids_manager=bids_manager:main']},
