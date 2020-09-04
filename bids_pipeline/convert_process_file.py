@@ -201,7 +201,7 @@ def convert_xls_file(filename):
                         if tmp_dict[cnt] == 'DOB' and elt != '':
                             dob = datetime.strptime(elt, '%d\%m\%Y')
                             elt = dob.strftime('%d%m%Y')
-                        elif tmp_dict[cnt].startswith('Date') and isinstance(elt, float):
+                        elif isinstance(elt, float) and tmp_dict[cnt].startswith('Date'):
                             date = datetime(*xlrd.xldate_as_tuple(elt, workbook.datemode))
                             elt = date.strftime('%d/%m/%Y')
                         tsv_tmp_dict[tmp_dict[cnt]].append(elt)

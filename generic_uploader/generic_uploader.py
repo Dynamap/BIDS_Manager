@@ -178,10 +178,11 @@ class GenericUploader(QtWidgets.QMainWindow, Ui_MainWindow):
                 data_path = sujet[current_action["Modality"]][current_action["Index"]]["fileLoc"]
             else:
                 data_path = os.path.join(papa.init_path, sujet[current_action["Modality"]][current_action["Index"]]["fileLoc"])
+            modality = current_action["Modality"]
             if os.path.isdir(data_path):
-                [nom, prenom, date] = papa.recursively_read_imagery_folder(data_path)
+                [nom, prenom, date] = papa.recursively_read_imagery_folder(data_path, modality)
             else:
-                [nom, prenom, date] = read_headers(data_path)
+                [nom, prenom, date] = read_headers(data_path, modality)
             if nom == prenom == date == 0:
                 qmesbox = QtWidgets.QMessageBox(papa)
                 qmesbox.setText("Le dossier ne contient pas que des fichiers dicom")
@@ -270,7 +271,8 @@ class GenericUploader(QtWidgets.QMainWindow, Ui_MainWindow):
         # Lecture des requirements :
         # Pour initialiser le sujet avec les requirements ===============
         self.requirements = self.bids_dataset.requirements
-        self.importation_path = os.path.normpath(os.path.join(self.init_path, ".."))
+        self.importation_path = os.path.join(self.init_path, 'derivatives', 'bids_uploader')#os.path.normpath(os.path.join(self.init_path, ".."))
+        os.makedirs(self.importation_path, exist_ok=True)
         self.bids_requirements_path = os.path.join(self.init_path, "code", "requirements.json")
         # b = ins_bids_class.Data2Import(requirements_fileloc=self.bids_requirements_path)
         # b.get_requirements(self.bids_requirements_path)
@@ -286,7 +288,7 @@ class GenericUploader(QtWidgets.QMainWindow, Ui_MainWindow):
         self.setupUi(self)
         self.progressBar.setVisible(False)
         self.progressBar.setValue(0)
-        self.generic_uploader_version = str(1.04)
+        self.generic_uploader_version = str(1.05)
         self.setWindowTitle("BIDSUploader v" + self.generic_uploader_version)
         self.MenuList = self.ListMenuObject(self)
         self.listWidget.clear()
@@ -299,7 +301,7 @@ class GenericUploader(QtWidgets.QMainWindow, Ui_MainWindow):
         self.electrode_brand = []
         self.seeg_run_number = {}
         self.Subject = {}
-        self.SubjectPHRC = {}
+        self.SubjectEmpty = {}
         self.flag_validated = False
         self.protocole = []
         self.maplist = []
@@ -367,6 +369,7 @@ class GenericUploader(QtWidgets.QMainWindow, Ui_MainWindow):
             curr_state = self.old_maplist[0]["curr_state"]
         else:
             curr_state = "invalid"
+
         self.maplist.append({"Modality": "", "ID": sub["sub"], "Protocole : ": self.proto_name,
                              "curr_state": curr_state})
         self.listWidget.addItem("ID : " + sub["sub"] + ", subject info : " + "Double_click => <Modify_identity> for modification")
@@ -565,7 +568,7 @@ class GenericUploader(QtWidgets.QMainWindow, Ui_MainWindow):
                     self.MenuList.modify_identity.setVisible(False)
                     self.MenuList.modify_info_action.setVisible(False)
             else:
-                self.MenuList.force_action.setVisible(False)
+                self.MenuList.force_action.setVisible(True)
                 self.MenuList.check_and_force_action.setVisible(False)
                 self.MenuList.delete_action.setVisible(True)
                 self.MenuList.modify_identity.setVisible(False)
@@ -976,6 +979,11 @@ class GenericUploader(QtWidgets.QMainWindow, Ui_MainWindow):
             modality_gui.combobox_list.append(QtWidgets.QComboBox(self))
             modality_gui.combobox_list[-1].setObjectName('task')
             modality_gui.combobox_list[-1].addItems([empty_room_dial.task])
+            if not self.SubjectEmpty:
+                self.SubjectEmpty = ins_bids_class.Subject()
+                self.SubjectEmpty['sub'] = 'emptyroom'
+                for key in self.requirements['Requirements']['Subject']['keys']:
+                    self.SubjectEmpty[key] = 'n/a'
         try:
             sub, curr_keys_dict = import_by_modality(self, modality, modality_gui, self.Subject)
         except Exception as e:
@@ -988,9 +996,17 @@ class GenericUploader(QtWidgets.QMainWindow, Ui_MainWindow):
                 return 0
         if sub == 0:
             return 0
-        self.Subject = sub
+        # if modality_gui.flag_emptyroom:
+        #     self.SubjectEmpty = sub
+        # else:
+        #     self.Subject = sub
         # pour bien remplir la liste :
         self.mapping_subject2list(sub)
+        if modality_gui.flag_emptyroom:
+            dict2append = sub['Meg'][-1].get_attributes('sub')
+            self.SubjectEmpty['Meg'].append(ins_bids_class.Meg())
+            self.SubjectEmpty['Meg'][-1].update(dict2append)
+            self.SubjectEmpty['Meg'][-1]['sub'] = 'emptyroom'
         QtWidgets.qApp.processEvents()
 
 
@@ -1276,15 +1292,15 @@ class GenericUploader(QtWidgets.QMainWindow, Ui_MainWindow):
         else:
             self.raz_gui()
 
-    def recursively_read_imagery_folder(self, path):
+    def recursively_read_imagery_folder(self, path, modality):
         for file in os.listdir(path):
             try:
-                [nom, prenom, date] = read_headers(os.path.join(path, file))
+                [nom, prenom, date] = read_headers(os.path.join(path, file), modality)
                 return nom, prenom, date
             except:
                 if os.path.isdir(os.path.join(path, file)):
                     new_path = os.path.join(path, file)
-                    [nom, prenom, date] = self.recursively_read_imagery_folder(new_path)
+                    [nom, prenom, date] = self.recursively_read_imagery_folder(new_path, modality)
                     if nom and prenom and date:
                         return [nom, prenom, date]
         nom = prenom = date = 0
@@ -1331,11 +1347,11 @@ class GenericUploader(QtWidgets.QMainWindow, Ui_MainWindow):
                 #list_files = os.listdir(data_path)
                 #if os.path.isdir(data_path) and [key][map_line["Index"]]["modality"]:
                 if os.path.isdir(data_path) and suj[key][map_line["Index"]]:
-                    [nom, prenom, date] = self.recursively_read_imagery_folder(data_path)
+                    [nom, prenom, date] = self.recursively_read_imagery_folder(data_path, key)
                     if nom == prenom == date == 0:
                         return 0
                 elif os.path.isfile(data_path) and suj[key][map_line["Index"]]:
-                    [nom, prenom, date] = read_headers(data_path)
+                    [nom, prenom, date] = read_headers(data_path, key)
                     if nom == prenom == date == 0:
                         return 0
                 else:
@@ -1358,7 +1374,7 @@ class GenericUploader(QtWidgets.QMainWindow, Ui_MainWindow):
             if str(self.maplist[action_number]["curr_state"]) not in ["valid", "forced"]:
                 data_path = os.path.join(self.current_working_path, suj[map_line['Modality']][map_line["Index"]]["fileLoc"])
                 try:
-                    [nom, prenom, date] = read_headers(os.path.join(data_path, data_path))
+                    [nom, prenom, date] = read_headers(os.path.join(data_path, data_path), map_line['Modality'])
                 except Exception as e:
                     # QtWidgets.QMessageBox.critical(self, "Erreur de lecture", "Impossible de lire les fichiers seeg")
                     return 0, e
@@ -1415,6 +1431,8 @@ class GenericUploader(QtWidgets.QMainWindow, Ui_MainWindow):
                         cur_state, error = validation_seeg(self.Subject, line, action)
                     elif tmp_modality.classname() == "Meg":
                         "reflechir a valider la meg ou neurophy de facon generale"
+                        self.listWidget.item(action).setForeground(QtGui.QColor("green"))
+                        self.maplist[action]["curr_state"] = "valid"
             # elif line["Modality"] == "" and "Addi_file_path" in line:
             #     cur_state = validation_addi_files(self.Subject, line, action)
             # elif line["Modality"] == "" and "fiche_patient" in line:
@@ -1642,6 +1660,10 @@ class GenericUploader(QtWidgets.QMainWindow, Ui_MainWindow):
                     local_copy_and_anonymization(classe, src_path, dest_path, self.Subject["sub"],
                                                  self.Subject[classe][item["Index"]]["modality"])
                 ins_bids_class.Data2Import._assign_import_dir(temp_patient_path)
+                if self.SubjectEmpty and item["Modality"] == 'Meg':
+                    for elt in self.SubjectEmpty['Meg']:
+                        if elt['fileLoc'] == self.Subject[item["Modality"]][item["Index"]]["fileLoc"]:
+                            elt['fileLoc'] = dest4data2import
                 self.Subject[item["Modality"]][item["Index"]]["fileLoc"] = dest4data2import
             else:
                 local_copy_and_anonymization(classe, src_path, dest_path, self.Subject["sub"], "")
@@ -1653,6 +1675,14 @@ class GenericUploader(QtWidgets.QMainWindow, Ui_MainWindow):
         data_to_import = ins_bids_class.Data2Import(temp_patient_path)
         data_to_import['DatasetDescJSON'] = ins_bids_class.DatasetDescJSON()
         data_to_import['DatasetDescJSON'].update({'Name': self.proto_name, 'BIDSVersion': '1.0.1'})
+        #Changement Aude
+        if self.SubjectEmpty:
+            file_loc = [elt['fileLoc'] for elt in self.SubjectEmpty['Meg']]
+            dict2remove = [cnt for cnt, elt in enumerate(self.Subject['Meg']) if elt['fileLoc'] in file_loc]
+            dict2remove.sort(reverse=True)
+            for cn in dict2remove:
+                del self.Subject['Meg'][cn]
+            data_to_import['Subject'] = self.SubjectEmpty
         data_to_import['Subject'] = self.Subject
         data_to_import.save_as_json()
         # # creation du fichier electrode_company

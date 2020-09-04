@@ -1757,6 +1757,58 @@ class AnatJSON(ImagingJSON):
     keylist = ImagingJSON.keylist + ['ContrastBolusIngredient']
 
 
+""" Pet brick with its file-specific sidecar files. """
+
+class Pet(Imaging):
+    keylist = BidsBrick.keylist + ['ses', 'task', 'acq', 'rec', 'run', 'modality', 'fileLoc', 'PetJSON']
+    required_keys = Imaging.required_keys + ['modality']
+    allowed_modalities = ['pet', 'petmr', 'petct']
+    allowed_file_formats = ['.nii']
+    readable_file_formats = allowed_file_formats + ['.dcm']
+    required_protocol_keys = []
+
+    def __init__(self):
+        super().__init__()
+
+
+class PetJSON(ImagingJSON):
+    required_keys =['Manufacturer', 'ManufacturersmodelName', 'Unit', 'TracerName', 'TracerRadionuclide', 'InjectedRadioactivity', 'InjectedRadioactivityUnit',
+                    'InjectedMass', 'InjectedMassUnit', 'SpecificRadioactivity', 'SpecificRadioactivityUnit', 'ModeOfAdministration', 'TimeZero', 'ScanStart',
+                    'InjectionStart', 'FrameTimesStart', 'FrameDuration', 'AcquisitionMode', 'ImageDecayCorrected', 'ImageDecayCorrectionTime', 'ReconMethodName',
+                    'ReconMethodParameterLabels', 'ReconMethodParameterUnit', 'ReconMethodParameterValues', 'ReconFilterType', 'ReconFilterSize', 'AttenuationCorrection',
+                    'PlasmaAvail', 'MetaboliteAvail', 'MetaboliteMethod', 'MetaboliteRecoveryCorrectionApplied', 'ContinuousBloodAvail', 'ContinuousBloodDispersionCorrected',
+                    'DiscreteBloodAvail']
+    keylist = required_keys + ['Anaesthesia', 'InstitutionName', 'InstitutionAddress', 'InstitutionalDepartmentName', 'BodyPart', 'TracerRadLex',
+                               'TracerSNOMED', 'TracerMolecularWeight', 'TracerMolecularWeightUnit', 'PharmaceuticalName', 'PharmaceuticalDoseAmount', 'PharmaceuticalDoseUnit',
+                               'PharmaceuticalDoseRegimen', 'PharmaceuticalDoseTime', 'InjectedMassPerWeight', 'InjectedMassPerWeightUnit', 'SpecificRadioactivityMeasTime',
+                               'MolarActivity', 'MolarActivityUnit', 'MolarActivityMeasTime', 'InfusionSpeed', 'InfusionSpeedUnit', 'InjectedVolume', 'InjectedVolumeUnit',
+                               'Purity', 'PurityUnit', 'ScanDate', 'InjectionEnd', 'ReconMethodImplementationVersion', 'AttenuationCorrectionMethodReference', 'ScaleFactor',
+                               'ScatterFraction', 'DecayCorrectionFactor', 'PromptRate', 'RandomRate', 'SinglesRate', 'PlasmaFreeFraction', 'PlasmaFreeFractionMethod',
+                               'ContinuousBloodWithdrawalRate', 'ContinuousBloodTubingType', 'ContinuousBloodTubingLength', 'ContinuousBloodDispersionConstant',
+                               'DiscreteBloodHaematocrit', 'DiscreteBloodDensity']
+
+
+class PetBloodTSV(BidsTSV):
+    required_fields = ['time']
+    header = required_fields + ['plasma_radioactivity', 'metabolite_parent_fraction', 'metabolite_polar_fraction', 'hplc_recovery_fractions', 'whole_blood_radioactivity']
+    modality_field = 'blood'
+
+
+class PetBloodJSON(BidsJSON):
+    required_keys = ['time']
+    keylist = required_keys + ['plasma_radioactivity', 'metabolite_parent_fraction', 'metabolite_polar_fraction', 'hplc_recovery_fractions', 'whole_blood_radioactivity']
+    modality_field = 'blood'
+
+
+class PetGlobalSidecars(GlobalSidecars):
+    complementary_keylist = ['PetBloodTSV', 'PetBloodJSON']
+    required_keys = BidsBrick.required_keys
+    keylist = required_keys + ['ses', 'task', 'acq', 'rec', 'run', 'recording', 'modality', 'fileLoc']
+    allowed_file_formats = ['.tsv', '.json']
+    readable_file_formats = ['.tsv', '.json']
+    allowed_modalities = [eval(elmt).modality_field for elmt in complementary_keylist]
+
+
 class AnatProcess(ImagingProcess):
     keylist = BidsBrick.keylist + ['ses', 'acq', 'ce', 'rec', 'run', 'mod', 'proc', 'desc', 'hemi', 'space', 'volspace', 'label', 'modality', 'fileLoc', 'AnatProcessJSON', 'AnatomicalLabels']
     required_keys = Anat.required_keys
@@ -2083,8 +2135,8 @@ class ScansTSV(BidsTSV):
 
 class Subject(BidsBrick):
 
-    keylist = BidsBrick.keylist + ['Anat', 'Func', 'Fmap', 'Dwi', 'Meg', 'Eeg', 'Ieeg',
-                                   'Beh', 'IeegGlobalSidecars', 'EegGlobalSidecars', 'Scans']
+    keylist = BidsBrick.keylist + ['Anat', 'Func', 'Fmap', 'Dwi', 'Pet', 'Meg', 'Eeg', 'Ieeg',
+                                   'Beh', 'IeegGlobalSidecars', 'EegGlobalSidecars', 'PetGlobalSidecars', 'Scans'] #'Pet',
     required_keys = BidsBrick.required_keys
 
     def __setitem__(self, key, value):
@@ -2223,7 +2275,7 @@ class DatasetDescJSON(BidsJSON):
                'ReferencesAndLinks', 'DatasetDOI']
     required_keys = ['Name', 'BIDSVersion']
     filename = 'dataset_description.json'
-    bids_version = '1.2.2'
+    bids_version = '1.4.0'
 
     def __init__(self):
         super().__init__()
@@ -2673,8 +2725,8 @@ class BidsDataset(MetaBrick):
             else:
                 if self.update_text:
                     self.update_text(self.curr_log, delete_flag=False)
-        except FileNotFoundError:
-            self.write_log('An error occurred. Refreshing Bids dataset!')
+        except (FileNotFoundError, KeyError) as err:
+            self.write_log('An error occurred {}.\nRefreshing Bids dataset!'.format(err))
             self.parse_bids()
         # check if parsing and log pipeline were created otherwise make them
         self.make_func_pipeline()
@@ -2788,7 +2840,7 @@ class BidsDataset(MetaBrick):
                         elif mod_dir + 'GlobalSidecars' in BidsBrick.get_list_subclasses_names() and ext.lower() \
                                 in eval(mod_dir + 'GlobalSidecars.allowed_file_formats') and filename.split('_')[-1]\
                                 in [eval(value + '.modality_field') for _, value in
-                                    enumerate(IeegGlobalSidecars.complementary_keylist)]:
+                                    enumerate(eval(mod_dir +'GlobalSidecars.complementary_keylist'))]:
                             subinfo[mod_dir + 'GlobalSidecars'] = eval(mod_dir + 'GlobalSidecars(filename+ext)')
                             subinfo[mod_dir + 'GlobalSidecars'][-1]['fileLoc'] = file.path
                             subinfo[mod_dir + 'GlobalSidecars'][-1].get_attributes_from_filename()
@@ -3169,6 +3221,11 @@ class BidsDataset(MetaBrick):
             for mod in bids_mod_list:
                 mod_in_bids_attr = mod.get_attributes('fileLoc')
                 if mod_dict2import_attr == mod_in_bids_attr:  # check if both mod dict have same attributes
+                    if mod_dict2import.classname() in GlobalSidecars.get_list_subclasses_names():
+                        file, ext_mod = os.path.splitext(mod['fileLoc'])
+                        file, ext_dict2import = os.path.splitext(mod_dict2import['fileLoc'])
+                        if ext_mod == ext_dict2import:
+                            return True
                     # if 'run' in mod_dict2import_attr.keys() and mod_dict2import_attr['run']:
                     #     # if run if a key check the JSON and possibly increment the run integer of mod_
                     #     # dict2import to import it
@@ -3180,7 +3237,8 @@ class BidsDataset(MetaBrick):
                     #         # add current nb_runs to 'run' if available otherwise do not import
                     #         mod_dict2import['run'] = str(1 + highest_run).zfill(2)
                     #         return False
-                    return True
+                    else:
+                        return True
             return False
 
         # if True:
@@ -4371,7 +4429,8 @@ class Issue(BidsBrick):
                 # to avoid error read json as normal dict and then copy_value in the correct bids object
                 cpy_read_json = read_file(latest_issue)
                 for issue_key in cpy_read_json.keys():
-                    for issue in read_json[issue_key]:
+                    issue_list = [issue for issue in read_json[issue_key]]
+                    for issue in issue_list:
                         iss_test = getattr(modules[__name__], issue_key)()
                         try:
                             iss_test.copy_values(issue)

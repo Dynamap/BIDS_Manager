@@ -44,7 +44,7 @@ class BidsManager(Frame, object):  # !!!!!!!!!! object is used to make the class
     # (https://stackoverflow.com/questions/18171328/python-2-7-super-error) While it is true that Tkinter uses
     # old-style classes, this limitation can be overcome by additionally deriving the subclass Application from object
     # (using Python multiple inheritance) !!!!!!!!!
-    version = '0.2.6'
+    version = '0.2.7'
     bids_startfile = os.path.join(os.getcwd(), 'Data')
     import_startfile = os.path.join(os.getcwd(), 'Data')
     folder_software = os.path.join(os.getcwd(), 'SoftwarePipeline')
@@ -870,8 +870,8 @@ class BidsManager(Frame, object):  # !!!!!!!!!! object is used to make the class
             self.update_text('BIDS uploader crashed')
             self.make_available()
             return
-        dirname = os.path.dirname(self.curr_bids.dirname)
-        self.upload_dir = os.path.join(dirname, 'TempFolder4Upload')
+        #dirname = os.path.dirname(self.curr_bids.dirname)
+        self.upload_dir = os.path.join(self.curr_bids.dirname, 'derivatives', 'bids_uploader', 'TempFolder4Upload')
         if not os.path.exists(self.upload_dir):
             self.update_text('The importation has been cancel because there is no data to import.')
             self.make_available()
@@ -964,7 +964,7 @@ class BidsManager(Frame, object):  # !!!!!!!!!! object is used to make the class
         messagebox.showinfo('License', notice_license)
 
     def cite_paper(self):
-        citation = 'Roehri, N., Villalon, S. M., Jegou, A., Colombet, B., Giusiano, B., Ponz, A., & Bénar, C. G. (2020)\n' \
+        citation = 'Roehri, N., Medina-Villalon, S., Jegou, A., Colombet, B., Giusiano, B., Ponz, A., & Bénar, C. G. (2020)\n' \
                    'Transfer , collection and organisation of electrophysiological and imaging data for multicenter studies.\n'\
                     '(submitted)'
         messagebox.showinfo('Citation', citation)

@@ -247,6 +247,8 @@ def import_by_modality(main_window, modality_class, modality_gui, subject):
                 extenstion_allowed = '*' + ' *'.join(files_type_allowed)
             elif keys_dict["modality"] == "electrodes":
                 extenstion_allowed = "*.tsv"
+            elif keys_dict["modality"] == 'blood':
+                extenstion_allowed = "(*.json *.tsv)"
         # else:                     # mettre une erreur ici
         #     files_type_allowed = getattr(ins_bids_class, modality_class).allowed_file_formats
         #     extenstion_allowed = '*' + ' *'.join(files_type_allowed)

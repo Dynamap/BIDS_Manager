@@ -113,10 +113,13 @@ class DerivativesSetting(object):
             desc_data = DatasetDescPipeline(param_vars=param_var, subject_list=subject_list)
             desc_data['Name'] = directory_name
         directory_path = os.path.join(self.path, directory_name)
-        norm_path = os.path.normpath(directory_path)
-        os.makedirs(norm_path, exist_ok=True)
-        desc_data.write_file(jsonfilename=os.path.join(norm_path, DatasetDescPipeline.filename))
-        return norm_path, directory_name, desc_data
+        os.makedirs(directory_path, exist_ok=True)
+        desc_data.write_file(jsonfilename=os.path.join(directory_path, DatasetDescPipeline.filename))
+        return directory_path, directory_name, desc_data
+        # norm_path = os.path.normpath(directory_path)
+        # os.makedirs(norm_path, exist_ok=True)
+        # desc_data.write_file(jsonfilename=os.path.join(norm_path, DatasetDescPipeline.filename))
+        # return norm_path, directory_name, desc_data
 
     def pipeline_is_present(self, pip_name):
         is_present = False
@@ -154,7 +157,7 @@ class DerivativesSetting(object):
                             subinfo[mod_dir + 'Process'][-1]['fileLoc'] = file.path
                             subinfo[mod_dir + 'Process'][-1].get_attributes_from_filename()
                             subinfo[mod_dir + 'Process'][-1]['modality'] = mod_dir
-                            subinfo.check_file_in_scans(file.name, mod_dir + 'Process')
+                            #subinfo.check_file_in_scans(file.name, mod_dir + 'Process')
                             #subinfo[mod_dir + 'Process'][-1].get_sidecar_files()
                         # elif mod_dir + 'GlobalSidecars' in bids.BidsBrick.get_list_subclasses_names() and ext.lower() \
                         #         in eval(mod_dir + 'GlobalSidecars.allowed_file_formats') and filename.split('_')[-1]\
@@ -202,9 +205,9 @@ class DerivativesSetting(object):
                 if entry.name.startswith('sub-') and entry.is_file():
                     directory = get_attribute_filename(entry.name)
                     shutil.move(entry, os.path.join(directory, entry.name))
-                elif entry.name.startswith(name) and entry.is_dir():
-                    for file in os.listdir(entry):
-                        shutil.move(os.path.join(entry, file), directory_path)
+                # elif entry.name.startswith(name) and entry.is_dir():
+                #     for file in os.listdir(entry):
+                #         shutil.move(os.path.join(entry, file), directory_path)
                 elif entry.name.startswith('sub-') and entry.is_dir():
                     sub, subname = entry.name.split('-')
                     pip['SubjectProcess'].append(bids.SubjectProcess())
@@ -215,7 +218,7 @@ class DerivativesSetting(object):
         def is_empty(files, default_files):
             return (len(files) == 0 or all(file in default_files for file in files))
 
-        empty_dirs = False
+        empty_dirs = []
         emp_dirs = []
         pip_directory = os.path.join(self.path, pip_name)
         analyse_name = pip_name.split('-')[0].lower()
@@ -233,10 +236,15 @@ class DerivativesSetting(object):
             else:
                 all_subs_empty = (len(dirs) == 0)
             if all_subs_empty and is_empty(files, default_files):
-                empty_dirs = True
+                empty_dirs.append(True)
                 emp_dirs.append(root)
+            else:
+                empty_dirs.append(False)
                 # yield root
-        return empty_dirs
+        if all(empty_dirs):
+            return True
+        else:
+            return False
 
 
 class DatasetDescPipeline(bids.DatasetDescJSON):
@@ -920,6 +928,17 @@ class Parameters(dict):
 class AnyWave(Parameters):
     anywave_directory = None
 
+    def __init__(self, curr_path=None, dev_path=None, callname=None):
+        if dev_path:
+            self.derivatives_directory = dev_path
+        if callname:
+            self.callname = callname
+        if curr_path:
+            self.curr_path = curr_path
+        home = os.path.expanduser('~')
+        self.anywave_directory = os.path.join(home, 'AnyWave', 'Log')
+        os.makedirs(self.anywave_directory, exist_ok=True)
+
     def command_line_base(self, cmd_line_set, mode, output_directory, input_p, output_p):
         self['plugin'] = self.callname
         cmd_end = ''
@@ -928,11 +947,11 @@ class AnyWave(Parameters):
         cmd_base = self.curr_path + cmd_line_set
 
         cmd_line, order = self.chaine_parameters(output_directory, input_p, output_p)
-        cmd = cmd_base + cmd_line
+        cmd = cmd_base + cmd_line + ' --log_dir ' + self.anywave_directory
         return cmd, order
 
     def chaine_parameters(self, output_directory, input_dict, output_dict):
-        jsonfilename = os.path.join(self.derivatives_directory, self['plugin'] + '_parameters' + '.json')
+        jsonfilename = os.path.normpath(os.path.join(self.derivatives_directory, self.callname + '_parameters' + '.json'))
         pref_flag = False
         suff_flag = False
 
@@ -955,6 +974,7 @@ class AnyWave(Parameters):
                 self['modality'] = self['modality'][-1]
                 if self['modality'] == 'Ieeg':
                     self['modality'] = 'SEEG'
+                self['modality'] = self['modality'].upper()
             json.dump(self, json_file)
         cmd_line = ' ' + jsonfilename
 
@@ -1007,13 +1027,13 @@ class AnyWave(Parameters):
     def verify_log_for_errors(self, input, x=None):
         log_error = ''
         # read log in Documents
-        home = os.path.expanduser('~')
-        if getpass.getuser() == 'jegou':
-            self.anywave_directory = r'Z:\AnyWave\Log'
-        else:
-            self.anywave_directory = os.path.join(home, 'AnyWave', 'Log')
-            if not os.path.exists(self.anywave_directory):
-                self.anywave_directory = os.path.join('\\dynaserv', 'home', getpass.getuser(), 'AnyWave', 'Log')
+        # home = os.path.expanduser('~')
+        # if getpass.getuser() == 'jegou':
+        #     self.anywave_directory = r'Z:\AnyWave\Log'
+        # else:
+        #     self.anywave_directory = os.path.join(home, 'AnyWave', 'Log')
+        #     if not os.path.exists(self.anywave_directory):
+        #         self.anywave_directory = os.path.join('\\dynaserv', 'home', getpass.getuser(), 'AnyWave', 'Log')
         temp_time = 0
         filename =''
         if os.path.exists(self.anywave_directory):
@@ -1376,7 +1396,7 @@ class InputArguments(Parameters):
         def check_dir_existence(bids_directory, chemin):
             chemin_final = os.path.join(self.bids_directory, '\\'.join(chemin))
             if os.path.exists(chemin_final):
-                return os.path.normpath(chemin_final)
+                return chemin_final
             else:
                 del chemin[-1]
                 return check_dir_existence(bids_directory, chemin)
