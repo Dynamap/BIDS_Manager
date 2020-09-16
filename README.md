@@ -47,7 +47,7 @@ The compile version of BIDS Manager can be downloaded here: https://figshare.com
 This project is licensed under the GPLv3 license.
 
 ## Comment
-If you wish to compile these scripts using PyInstaller 3.6 or above, use the command below:
+If you wish to compile these scripts using PyInstaller 4.0 or above, use the command below:
 ```
 pyinstaller --onefile --icon=bids_manager.ico --hidden-import PyQt5.sip bids_manager.py
 ```
