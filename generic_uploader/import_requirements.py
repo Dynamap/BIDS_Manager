@@ -20,7 +20,6 @@
 #
 #     Authors: Samuel Medina, 2018-2020
 
-import os
 import json
 
 

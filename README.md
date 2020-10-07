@@ -3,24 +3,19 @@ Package to collect, organise and manage neuroscience data in Brain Imaging Data 
 
 
 ## Version
-BIDS Manager v0.2.5
+BIDS Manager v0.2.6
 
 This version of BIDS Manager uses a version of BIDS Uploader which does not yet handle data transfer via SFTP, the SFTP transfer will me publicly available soon.
 
 ## How to cite
-* Roehri, N., Villalon, S. M., Jegou, A., Colombet, B., Giusiano, B., Ponz, A., & Bénar, C. G., Transfer, collection and organisation of electrophysiological and imaging data for multicenter studies. (submitted)
+* Roehri, N., Medina-Villalon, S., Jegou, A., Colombet, B., Giusiano, B., Ponz, A., & Bénar, C. G., Transfer, collection and organisation of electrophysiological and imaging data for multicenter studies. (submitted)
 
 ## Features
-* Collect data in differents format (except eeg for now):
+* Collect data in differents format:
   * DICOM
-  * Nifti
   * Micromed (.trc)
   * Brain products (.vhdr)
   * EDF+ (.edf)
-  * EGI (.mff)
-  * EEGLAB (.set)
-  * SPM (.mat)
-  * ANT EEProbe (.cnt)
   * 4D neuroimaging 
 * Organise data in BIDS format
 * Offer graphical interface to visualise/manage BIDS dataset
@@ -38,10 +33,16 @@ This version of BIDS Manager uses a version of BIDS Uploader which does not yet 
 ## Compiled Version for Windows 10
 The compile version of BIDS Manager can be downloaded here: https://figshare.com/articles/BIDS_Manager/11728872
 
+## Example dataset
+An **example dataset** is available here: https://figshare.com/articles/Example_Dataset_for_BIDS_Manager/11687064
+
+## Tutorial video
+A tutorial video explaining you how to convert the example dataset is available [HERE](https://www.youtube.com/watch?v=HDXDP_a8ceI&feature=youtu.be)
+
 ## Authors
-* Main developper: Nicolas Roehri <nicolas.roehri@etu.univ-amu.fr>
-* Developpers: Samuel Medina (generic_uploader) <samuel.medinavillalon@gmail.com>, 
-		Aude Jegou <aude.jegou@univ-amu.fr>
+* Main developer: Nicolas Roehri <roehri.nicolas@gmail.com>
+* Developers: Samuel Medina (generic_uploader) <samuel.medinavillalon@gmail.com>, 
+		      Aude Jegou <aude.jegou@univ-amu.fr>
 
 ## License
 This project is licensed under the GPLv3 license.
@@ -49,6 +50,5 @@ This project is licensed under the GPLv3 license.
 ## Comment
 If you wish to compile these scripts using PyInstaller 4.0 or above, use the command below:
 ```
-pyinstaller --onefile --icon=bids_manager.ico --hidden-import PyQt5.sip bids_manager.py
+pyinstaller --onefile --icon=bids_manager.ico --hidden-import PyQt5.sip bids_manager\\bids_manager.py
 ```
-An **example dataset** is available here: https://figshare.com/articles/Example_Dataset_for_BIDS_Manager/11687064

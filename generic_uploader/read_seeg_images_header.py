@@ -21,8 +21,10 @@
 import struct
 import os
 import pydicom
+from .anonymize_edf import get_patient_info
 
-def read_headers(file):
+
+def read_headers(file, modality):
     filename, file_extension = os.path.splitext(str(file))
     file_extension = file_extension.lower()
     if file_extension == ".trc":
@@ -86,7 +88,9 @@ def read_headers(file):
                     origbirthdate = origbirthdate.replace("/", "")
                     birthdate = origbirthdate[0:4] + origbirthdate[4:8]
                     break
-    elif (file_extension == ".dcm" or file_extension == "" or file_extension == ".ima") and not os.path.isdir(file):
+    elif file_extension.lower() == ".edf":
+        lastname, firstname, birthdate = get_patient_info(file)
+    elif (file_extension == ".dcm" or file_extension == "" or file_extension == ".ima") and (not os.path.isdir(file) and modality != 'Meg'):
         dataset = pydicom.read_file(filename + file_extension)
         name = str(dataset.data_element("PatientName").value)
         A = name.split("^")

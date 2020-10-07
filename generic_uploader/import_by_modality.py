@@ -22,7 +22,7 @@
 
 from PyQt5 import QtWidgets
 import os
-import ins_bids_class
+from bids_manager import ins_bids_class
 from generic_uploader.meg_import_dialog import MegImportDialog
 
 
@@ -116,6 +116,48 @@ def import_by_modality(main_window, modality_class, modality_gui, subject):
             if tmp_modality.classname() is not "Meg":
                 imported_name = QtWidgets.QFileDialog.getOpenFileNames(None, "Select one or more files",
                                                                main_window.last_path, extenstion_allowed)
+                # SEEG part
+                if not imported_name[0]:
+                    return 0, 0
+                main_window.last_path = os.path.dirname(str(imported_name[0]))
+                nb_file = imported_name[0].__len__()
+                if nb_file == 0:
+                    return 0, 0
+                imported_name = imported_name[0]  # to go from tupple to list
+                file_list = [str(imported_name[i]) for i in range(0, nb_file)]
+                files_status = main_window.return_error_if_accent_in_name(file_list)
+                if files_status == 0:
+                    return 0, 0
+                for i in range(0, nb_file):
+                    filename, file_ext = os.path.splitext(file_list[i])
+                    if file_ext == ".dat" or file_ext == ".vmrk" or (
+                            file_ext == ".eeg" and os.path.isfile(filename + '.vhdr')):
+                        continue
+                    # attention si nom de fichier existant erreur ---------------------
+                    for a in range(1, len(main_window.maplist)):
+                        listwidget_element = str(main_window.listWidget.item(a).text())
+                        filepath = listwidget_element.split(": ")
+                        filepath = filepath[1]
+                        existing_basename = os.path.basename(filepath)
+                        new_basename = os.path.basename(file_list[i])
+                        if existing_basename == new_basename:
+                            QtWidgets.QMessageBox.critical(main_window, "error",
+                                                           "error, file with same name already existing")
+                            return 0, 0
+                            # -------------------------------------------------------------
+                    subject[modality_class] = eval("ins_bids_class." + modality_class + "()")  # PROBLEM ICI PHOTO
+                    '''subject[modality_class][-1].update({'sub': subject['sub'], 'ses': session, 'acq': acq,
+                                                        'modality': modality, 'fileLoc': str(file_list[i])})'''
+                    # test sam pour update generic
+                    subject[modality_class][-1].update({'sub': subject['sub'], 'fileLoc': str(file_list[i])})
+                    # items_list = [item for item in subject[modality_class][-1].keys() if
+                    #               item in ["ses", "acq", "modality", "task"]]
+                    items_list = [item for item in subject[modality_class][-1].keys() if item in key_list]
+                    for j in range(0, len(items_list)):
+                        subject[modality_class][-1].update({items_list[j]: keys_dict[items_list[j]]})
+                    # gérer le run ici
+                    run_nb = find_run_nb(subject[modality_class], items_list, bids_dataset)
+                    subject[modality_class][-1].update({'run': str(run_nb)})
             else:
                 meg_import_dialog = MegImportDialog()
                 res = meg_import_dialog.exec_()
@@ -125,6 +167,47 @@ def import_by_modality(main_window, modality_class, modality_gui, subject):
                     if meg_import_dialog.flag_import == "files":
                         imported_name = QtWidgets.QFileDialog.getOpenFileNames(None, "Select one or more files",
                                                                            main_window.last_path, extenstion_allowed)
+                        main_window.last_path = os.path.dirname(str(imported_name[0]))
+                        # car il peut y avoir plusieurs fichier !!
+                        main_window.last_path = os.path.dirname(str(imported_name[0]))
+                        nb_file = imported_name[0].__len__()
+                        if nb_file == 0:
+                            return 0, 0
+                        imported_name = imported_name[0]  # to go from tupple to list
+                        file_list = [str(imported_name[i]) for i in range(0, nb_file)]
+                        files_status = main_window.return_error_if_accent_in_name(file_list)
+                        if files_status == 0:
+                            return 0, 0
+                        for i in range(0, nb_file):
+                            filename, file_ext = os.path.splitext(file_list[i])
+                            if file_ext not in files_type_allowed:
+                                continue
+                            # attention si nom de fichier existant erreur ---------------------
+                            for a in range(1, len(main_window.maplist)):
+                                listwidget_element = str(main_window.listWidget.item(a).text())
+                                filepath = listwidget_element.split(": ")
+                                filepath = filepath[1]
+                                existing_basename = os.path.basename(filepath)
+                                new_basename = os.path.basename(file_list[i])
+                                if existing_basename == new_basename:
+                                    QtWidgets.QMessageBox.critical(main_window, "error",
+                                                                   "error, file with same name already existing")
+                                    return 0, 0
+                                    # -------------------------------------------------------------
+                            subject[modality_class] = eval(
+                                "ins_bids_class." + modality_class + "()")  # PROBLEM ICI PHOTO
+                            '''subject[modality_class][-1].update({'sub': subject['sub'], 'ses': session, 'acq': acq,
+                                                                'modality': modality, 'fileLoc': str(file_list[i])})'''
+                            # test sam pour update generic
+                            subject[modality_class][-1].update({'sub': subject['sub'], 'fileLoc': str(file_list[i])})
+                            # items_list = [item for item in subject[modality_class][-1].keys() if
+                            #               item in ["ses", "acq", "modality", "task"]]
+                            items_list = [item for item in subject[modality_class][-1].keys() if item in key_list]
+                            for j in range(0, len(items_list)):
+                                subject[modality_class][-1].update({items_list[j]: keys_dict[items_list[j]]})
+                            # gérer le run ici
+                            run_nb = find_run_nb(subject[modality_class], items_list, bids_dataset)
+                            subject[modality_class][-1].update({'run': str(run_nb)})
                     elif meg_import_dialog.flag_import == "folder":
                         imported_name = QtWidgets.QFileDialog.getExistingDirectory(None, "Select MEG folder",
                                                                            main_window.last_path)
@@ -140,47 +223,7 @@ def import_by_modality(main_window, modality_class, modality_gui, subject):
                         run_nb = find_run_nb(subject[modality_class], items_list, bids_dataset)
                         subject[modality_class][-1].update({'run': str(run_nb)})
                         main_window.last_path = imported_name
-                    return subject, keys_dict
-            if not imported_name[0]:
-                return 0, 0
-            main_window.last_path = os.path.dirname(str(imported_name[0]))
-            nb_file = imported_name[0].__len__()
-            if nb_file == 0:
-                return 0, 0
-            imported_name = imported_name[0]        # to go from tupple to list
-            file_list = [str(imported_name[i]) for i in range(0, nb_file)]
-            files_status = main_window.return_error_if_accent_in_name(file_list)
-            if files_status == 0:
-                return 0, 0
-            for i in range(0, nb_file):
-                filename, file_ext = os.path.splitext(file_list[i])
-                if file_ext == ".dat" or file_ext == ".vmrk" or (
-                        file_ext == ".eeg" and os.path.isfile(filename + '.vhdr')):
-                    continue
-                # attention si nom de fichier existant erreur ---------------------
-                for a in range(1, len(main_window.maplist)):
-                    listwidget_element = str(main_window.listWidget.item(a).text())
-                    filepath = listwidget_element.split(": ")
-                    filepath = filepath[1]
-                    existing_basename = os.path.basename(filepath)
-                    new_basename = os.path.basename(file_list[i])
-                    if existing_basename == new_basename:
-                        QtWidgets.QMessageBox.critical(main_window, "error", "error, file with same name already existing")
-                        return 0, 0
-                        # -------------------------------------------------------------
-                subject[modality_class] = eval("ins_bids_class." + modality_class + "()")                   # PROBLEM ICI PHOTO
-                '''subject[modality_class][-1].update({'sub': subject['sub'], 'ses': session, 'acq': acq,
-                                                    'modality': modality, 'fileLoc': str(file_list[i])})'''
-                # test sam pour update generic
-                subject[modality_class][-1].update({'sub': subject['sub'], 'fileLoc': str(file_list[i])})
-                # items_list = [item for item in subject[modality_class][-1].keys() if
-                #               item in ["ses", "acq", "modality", "task"]]
-                items_list = [item for item in subject[modality_class][-1].keys() if item in key_list]
-                for j in range(0, len(items_list)):
-                    subject[modality_class][-1].update({items_list[j]: keys_dict[items_list[j]]})
-                # gérer le run ici
-                run_nb = find_run_nb(subject[modality_class], items_list, bids_dataset)
-                subject[modality_class][-1].update({'run': str(run_nb)})
+                        return subject, keys_dict
     else:
         if "modality" in key_list:
             if keys_dict["modality"] == "coordsystem":

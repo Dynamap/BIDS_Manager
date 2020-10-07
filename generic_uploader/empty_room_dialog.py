@@ -20,27 +20,28 @@
 #
 #     Authors: Samuel Medina, 2018-2020
 
-from PyQt5 import QtGui, QtWidgets
+from PyQt5 import QtGui, QtWidgets, QtCore
+import datetime
 
 
-class MegImportDialog(QtWidgets.QDialog):
+class EmptyRoomImportDialog(QtWidgets.QDialog):
     def __init__(self):
         QtWidgets.QDialog.__init__(self)
-        self.setWindowTitle("MEG files or MEG folder ?")
-        self.setMinimumSize(300, 100)
-        files_button = QtWidgets.QPushButton("Files")
-        files_button.clicked.connect(self.import_files)
-        folder_button = QtWidgets.QPushButton("Folder")
-        folder_button.clicked.connect(self.import_folder)
-        meg_dialog_button = QtWidgets.QDialogButtonBox(self)
-        meg_dialog_button.addButton(files_button, meg_dialog_button.YesRole)
-        meg_dialog_button.addButton(folder_button, meg_dialog_button.NoRole)
-        self.flag_import = ""
+        self.setWindowTitle("Enter session date")
+        self.setMinimumSize(400, 100)
+        self.date_edit = QtWidgets.QDateEdit(self)
+        self.date_edit.setGeometry(25, 25, 150, 25)
+        self.date_edit.setObjectName('acquisition date')
+        curr_time = datetime.datetime.now()
+        self.date_edit.setDateTime(QtCore.QDateTime(QtCore.QDate(curr_time.year, curr_time.month, curr_time.day),
+                                                    QtCore.QTime(1, 0, 0)))
+        accept_button = QtWidgets.QPushButton("Import", self)
+        accept_button.setGeometry(200, 25, 100, 25)
+        accept_button.clicked.connect(self.import_files)
 
     def import_files(self):
-        self.flag_import = "files"
-        self.accept()
-
-    def import_folder(self):
-        self.flag_import = "folder"
+        date = self.date_edit.date()
+        date_str = date.toString('yyyyMMdd')
+        self.ses = date_str
+        self.task = 'noise'
         self.accept()

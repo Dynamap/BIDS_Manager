@@ -23,12 +23,23 @@
 from PyQt5 import QtCore, QtGui, QtWidgets
 from math import ceil
 
+try:
+    _fromUtf8 = QtCore.QString.fromUtf8
+except AttributeError:
+    def _fromUtf8(s):
+        return s
 
 class PatientRequirementsClass(QtWidgets.QDialog):
     def __init__(self, requirements, suj):
         QtWidgets.QDialog.__init__(self)
         self.setObjectName("Requirements windows")
         self.setWindowTitle("Requirements windows")
+        screen_geom = self.screen().geometry()
+        screen_width = screen_geom.width()
+        screen_height = screen_geom.height()
+        font = QtGui.QFont()
+        font.setFamily(_fromUtf8("Segoe UI"))
+        font.setPointSize(8)
         # self.resize(1000, 800)
         # self.setSizeGripEnabled(True)
         self.setModal(True)
@@ -40,15 +51,17 @@ class PatientRequirementsClass(QtWidgets.QDialog):
         line_edit_list = []
         requirements_object_list = []
         i = 0
-        largeur_des_elements = 250
+        largeur_des_elements = 250*screen_width/1920
         hauteur_des_elements = 25
-        inter_element = 20
+        inter_element = 20*screen_width/1920
         nb_by_line = 3.0
         nb_line = ceil(nb_keys / nb_by_line) + 1  # 'OK' button
         # self.resize(1000, nb_keys/3*hauteur_des_elements*4)
-        self.resize(nb_by_line*largeur_des_elements + (nb_by_line-1)*inter_element + largeur_des_elements/nb_by_line*(nb_by_line-1),
+        self.setFixedSize(nb_by_line*largeur_des_elements + (nb_by_line-1)*inter_element + largeur_des_elements/nb_by_line*(nb_by_line-1),
                     nb_line * 2 * 1.5 * hauteur_des_elements + hauteur_des_elements)
-        self.setSizeGripEnabled(True)
+        #self.resize(nb_by_line*largeur_des_elements + (nb_by_line-1)*inter_element + largeur_des_elements/nb_by_line*(nb_by_line-1),
+        #            nb_line * 2 * 1.5 * hauteur_des_elements + hauteur_des_elements)
+        self.setSizeGripEnabled(False)
         for key in required_keys:
             if key == "sub":
                 continue
@@ -59,6 +72,7 @@ class PatientRequirementsClass(QtWidgets.QDialog):
                                                        , (i//nb_by_line*2*1.5*hauteur_des_elements) + hauteur_des_elements,
                                                        largeur_des_elements, hauteur_des_elements))
             line_edit_list[i].setObjectName(key)
+            line_edit_list[i].setFont(font)
             if key in needed_items:
                 line_edit_list[i].setText(key + " *")
                 line_edit_list[i].setToolTip("Mandatory")
@@ -90,6 +104,7 @@ class PatientRequirementsClass(QtWidgets.QDialog):
                 if suj[key]:
                     key_idx = requirements_object_list[i].findText(suj[key])
                     requirements_object_list[i].setCurrentIndex(key_idx)
+            requirements_object_list[i].setFont(font)
             if key == "sex" or key == "age":
                 requirements_object_list[i].setEnabled(False)
             #     sex_idx = requirements_object_list[i].findText(suj[key])
