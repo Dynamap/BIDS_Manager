@@ -37,7 +37,7 @@ The compile version of BIDS Manager can be downloaded here: https://figshare.com
 An **example dataset** is available here: https://figshare.com/articles/Example_Dataset_for_BIDS_Manager/11687064
 
 ## Tutorial video
-A tutorial video explaining you how to convert the example dataset is available [HERE](https://www.youtube.com/watch?v=HDXDP_a8ceI&feature=youtu.be)
+A tutorial video explaining you how to convert the example dataset is available [HERE](https://youtu.be/HvJjr6WZNQA)
 
 ## Authors
 * Main developer: Nicolas Roehri <roehri.nicolas@gmail.com>
