@@ -22,7 +22,7 @@ All notable changes to BIDS Manager-Pipeline will be documented in this file.
 - Sort the elements from list in the requirements file
 
 
-###Changed
+### Changed
 - Arguments for boolean in json file describing the pipeline should be written as {"default":true/false, "incommandline": true/false}
 => if "incommandline":true, the parameter will be displayed in the command line like this "pipeline param true/false"
 => if "incommandline":false, the parameter will be displayed in the command line only if its value is true, else it won't be displayed like this "pipeline param" or "pipeline"
