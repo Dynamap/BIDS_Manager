@@ -23,6 +23,12 @@
 from PyQt5 import QtCore, QtGui, QtWidgets
 from math import ceil
 
+try:
+    _fromUtf8 = QtCore.QString.fromUtf8
+except AttributeError:
+    def _fromUtf8(s):
+        return s
+
 
 class ModalityGui(QtWidgets.QDialog):
     # def __init__(self, session, modality, acquisition, task, run):
@@ -32,21 +38,29 @@ class ModalityGui(QtWidgets.QDialog):
         self.setWindowTitle("Modality GUI")
         self.setModal(True)
         self.flag_emptyroom =False
+        screen_geom = self.screen().geometry()
+        screen_width = screen_geom.width()
+        screen_height = screen_geom.height()
+        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
         '''elements = [element for element in ["session", "modality", "acquisition", "task", "run", "space"]
                     if eval(element)]'''
+        font = QtGui.QFont()
+        font.setFamily(_fromUtf8("Segoe UI"))
+        font.setPointSize(8)
         elements = keys_dict.keys()
         nb_elements = len(elements)
         line_edit_list = []
         element_list = []
         i = 0
-        largeur_des_elements = 250
-        inter_element = 20
+        largeur_des_elements = 250*screen_width/1920
+        inter_element = 20*screen_width/1920
         hauteur_des_elements = 25
         nb_by_line = 3.0
         nb_line = ceil(nb_elements/nb_by_line) + 1 # 'import' button
-        self.resize(nb_by_line*largeur_des_elements + (nb_by_line+1)*inter_element,
+        #self.resize
+        self.setFixedSize(nb_by_line*largeur_des_elements + (nb_by_line+1)*inter_element,
                     nb_line*2*hauteur_des_elements + (nb_line+1)*inter_element)
-        self.setSizeGripEnabled(True)
+        self.setSizeGripEnabled(False)
         line_edit_list = []
         combobox_list = []
         i = 0
@@ -57,14 +71,18 @@ class ModalityGui(QtWidgets.QDialog):
             line_edit_list[i].setGeometry(QtCore.QRect(inter_element + reste_division*(largeur_des_elements+inter_element)
                                                        , inter_element + (i//nb_by_line*(2*hauteur_des_elements+inter_element)),
                                                        largeur_des_elements, hauteur_des_elements))
+            line_edit_list[i].setSizePolicy(sizePolicy)
             line_edit_list[i].setObjectName(field)
             line_edit_list[i].setText(field)
+            line_edit_list[i].setFont(font)
             combobox_list.append(QtWidgets.QComboBox(self))
             combobox_list[i].setEnabled(True)
             combobox_list[i].setGeometry(QtCore.QRect(inter_element + reste_division*(largeur_des_elements+inter_element),
                                                       inter_element + (i//nb_by_line*(2*hauteur_des_elements+inter_element))
                                                       + hauteur_des_elements, largeur_des_elements, hauteur_des_elements))
+            combobox_list[i].setSizePolicy(sizePolicy)
             combobox_list[i].setObjectName(field)
+            combobox_list[i].setFont(font)
             # combobox_list[i].addItems(eval(field))
             # correction car ne fonctionnait pas avec les globals sidecars si pas de liste
             if type(keys_dict[field]) is not list:
@@ -80,7 +98,9 @@ class ModalityGui(QtWidgets.QDialog):
                                                     ((nb_line-1)*(2*hauteur_des_elements+inter_element))
                                                     + hauteur_des_elements, largeur_des_elements / 2,
                                                     hauteur_des_elements))
+        self.import_button.setSizePolicy(sizePolicy)
         self.import_button.setText("Import")
+        self.import_button.setFont(font)
         self.import_button.clicked.connect(self.import_files)
         self.combobox_list = combobox_list
         if 'meg' in keys_dict['modality']:

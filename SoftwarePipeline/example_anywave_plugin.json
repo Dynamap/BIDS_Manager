@@ -20,7 +20,8 @@
    "unit": "components"
   },
   "downsampling": {
-   "default": true
+   "default": true,
+   "incommandline": true
   },
   "modality": {
    "readbids": true,
@@ -37,7 +38,8 @@
    "multipleselection": true
   },
   "skip_bad": {
-    "default": true
+    "default": true,
+    "incommandline": true
   },
   "Input": [
    {

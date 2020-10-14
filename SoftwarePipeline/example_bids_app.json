@@ -5,8 +5,8 @@
 	"command_line_base": "",
 	"Intermediate": "Docker",
 	"Callname": "bids/freesurfer",
-	"participant": {"default": false},
-	"group": {"default": false},
+	"participant": {"default": false, "incommandline": false},
+	"group": {"default": false, "incommandline": false},
 	"--participant_label": {
 	 "readbids": true,
 	 "type": "sub"
@@ -67,6 +67,6 @@
 	 "fileLoc": "",
 	 "extension": "json"
 	},
-	"--skip_bids_validator": {"default": false}
+	"--skip_bids_validator": {"default": false, "incommandline": false}
    }
 }

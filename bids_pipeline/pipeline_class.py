@@ -66,9 +66,6 @@ class DerivativesSetting(object):
             it_exist = False
             for pip in pip_list:
                 if pip.startswith(pip_name.lower()):
-                    # variant = pip.split('-')
-                    # if len(variant) > 1:
-                    #     variant_list.append(variant[1:])
                     variant_list.append(pip)
                     it_exist=True
             return it_exist, variant_list
@@ -79,12 +76,6 @@ class DerivativesSetting(object):
             it_exist, variant_list = check_pipeline_variant(pip_list, pip_name)
             if it_exist:
                 for elt in variant_list:
-                    # empty_dirs = self.empty_dirs(elt, recursive=True)
-                    # if empty_dirs:
-                    #     directory_name = elt
-                    #     desc_data = DatasetDescPipeline(param_vars=param_var, subject_list=subject_list)
-                    #     desc_data['Name'] = directory_name
-                    #     break
                     dataset_file = os.path.join(self.path, elt, DatasetDescPipeline.filename)
                     if not os.path.exists(dataset_file):
                         dataset_file = None
@@ -93,17 +84,12 @@ class DerivativesSetting(object):
                     if (same_param and not sub_inside) or mode:
                         directory_name = elt
                         if not mode:
-                            #desc_data['SourceDataset']['sub'].append(subject_list['sub'])
                             desc_data.update(subject_list)
                         break
                 if not directory_name:
                     directory_name = pip_name.lower() + '-v' + str(len(variant_list) + 1)
                     desc_data = DatasetDescPipeline(param_vars=param_var, subject_list=subject_list)
                     desc_data['Name'] = directory_name
-            # if it_exist and not variant_list:
-            #     directory_name = pip_name + '-v1'
-            # elif it_exist and variant_list:
-            #     directory_name = pip_name + '-v' + str(len(variant_list)+1)
             else:
                 directory_name = pip_name.lower()
                 desc_data = DatasetDescPipeline(param_vars=param_var, subject_list=subject_list)
@@ -116,10 +102,6 @@ class DerivativesSetting(object):
         os.makedirs(directory_path, exist_ok=True)
         desc_data.write_file(jsonfilename=os.path.join(directory_path, DatasetDescPipeline.filename))
         return directory_path, directory_name, desc_data
-        # norm_path = os.path.normpath(directory_path)
-        # os.makedirs(norm_path, exist_ok=True)
-        # desc_data.write_file(jsonfilename=os.path.join(norm_path, DatasetDescPipeline.filename))
-        # return norm_path, directory_name, desc_data
 
     def pipeline_is_present(self, pip_name):
         is_present = False
@@ -157,16 +139,6 @@ class DerivativesSetting(object):
                             subinfo[mod_dir + 'Process'][-1]['fileLoc'] = file.path
                             subinfo[mod_dir + 'Process'][-1].get_attributes_from_filename()
                             subinfo[mod_dir + 'Process'][-1]['modality'] = mod_dir
-                            #subinfo.check_file_in_scans(file.name, mod_dir + 'Process')
-                            #subinfo[mod_dir + 'Process'][-1].get_sidecar_files()
-                        # elif mod_dir + 'GlobalSidecars' in bids.BidsBrick.get_list_subclasses_names() and ext.lower() \
-                        #         in eval(mod_dir + 'GlobalSidecars.allowed_file_formats') and filename.split('_')[-1]\
-                        #         in [eval(value + '.modality_field') for _, value in
-                        #             enumerate(bids.IeegGlobalSidecars.complementary_keylist)]:
-                        #     subinfo[mod_dir + 'GlobalSidecars'] = eval(mod_dir + 'GlobalSidecars(filename+ext)')
-                        #     subinfo[mod_dir + 'GlobalSidecars'][-1]['fileLoc'] = file.path
-                        #     subinfo[mod_dir + 'GlobalSidecars'][-1].get_attributes_from_filename()
-                        #     subinfo[mod_dir + 'GlobalSidecars'][-1].get_sidecar_files()
                     elif mod_dir and file.is_dir():
                         str2add = 'Process'
                         subinfo[mod_dir + str2add] = eval('bids.' + mod_dir + str2add + '()')
@@ -205,9 +177,6 @@ class DerivativesSetting(object):
                 if entry.name.startswith('sub-') and entry.is_file():
                     directory = get_attribute_filename(entry.name)
                     shutil.move(entry, os.path.join(directory, entry.name))
-                # elif entry.name.startswith(name) and entry.is_dir():
-                #     for file in os.listdir(entry):
-                #         shutil.move(os.path.join(entry, file), directory_path)
                 elif entry.name.startswith('sub-') and entry.is_dir():
                     sub, subname = entry.name.split('-')
                     pip['SubjectProcess'].append(bids.SubjectProcess())
@@ -250,7 +219,7 @@ class DerivativesSetting(object):
 class DatasetDescPipeline(bids.DatasetDescJSON):
     keylist = ['Name', 'BIDSVersion', 'PipelineDescription', 'SourceDataset', 'Author', 'Date']
     filename = 'dataset_description.json'
-    bids_version = '1.3.0'
+    bids_version = '1.4.0'
 
     def __init__(self, filename=None, param_vars=None, subject_list=None):
         super().__init__()
@@ -301,20 +270,24 @@ class DatasetDescPipeline(bids.DatasetDescJSON):
         is_same = all(is_same)
         sub_not_in = []
         elt_not_in = []
+        same_deriv = True
         for key in subject_list:
             if key in self['SourceDataset'].keys():
                 if isinstance(subject_list[key], dict):
                     for elt in subject_list[key]:
-                        if elt in self['SourceDataset'][key]:
+                        if elt == 'deriv-folder' and elt in self['SourceDataset'][key]:
+                            if any(el not in self['SourceDataset'][key][elt] for el in subject_list[key][elt]):
+                                same_deriv = False
+                        elif elt in self['SourceDataset'][key]:
                             elt_not_in.append(any(el not in self['SourceDataset'][key][elt] for el in subject_list[key][elt]))
                 else:
                     sub_not_in.append(all(elt not in self['SourceDataset'][key] for elt in subject_list[key]))
             else:
                 elt_not_in.append(False)
         #subject_inside = all(sub in self['SourceDataset']['sub'] for sub in subject_list['sub'])
-        if all(sub_not_in):
+        if all(sub_not_in) and same_deriv:
             subject_inside = False
-        elif any(elt_not_in):
+        elif any(elt_not_in) and same_deriv:
             subject_inside = False
         else:
             subject_inside = True
@@ -327,6 +300,7 @@ class DatasetDescPipeline(bids.DatasetDescJSON):
             if isinstance(subject2add[elt], list) and elt in self['SourceDataset'].keys():
                 self['SourceDataset'][elt].extend(subject2add[elt])
                 self['SourceDataset'][elt] = list(set(self['SourceDataset'][elt]))
+                self['SourceDataset'][elt].sort()
             elif isinstance(subject2add[elt], dict):
                 if elt in self['SourceDataset'].keys():
                     for clef in subject2add[elt]:
@@ -335,6 +309,7 @@ class DatasetDescPipeline(bids.DatasetDescJSON):
                         else:
                             self['SourceDataset'][elt][clef] = subject2add[elt][clef]
                         self['SourceDataset'][elt][clef] = list(set(self['SourceDataset'][elt][clef]))
+                        self['SourceDataset'][elt][clef].sort()
 
 
 class PipelineSetting(dict):
@@ -442,7 +417,7 @@ class PipelineSetting(dict):
                         use_list.append(elt)
             return use_list
 
-        def anywave_constraint(order, idx_in, in_out):
+        def anywave_constraint(order, idx_in, in_out, mtg_type=None):
             in_idx = list(idx_in.keys())[0]
             order_key = list(order.keys())
             if '--output_file' in order or '--output_prefix' in order:
@@ -456,6 +431,21 @@ class PipelineSetting(dict):
                         file_elt = filename.split('_')
                         new_file = '_'.join(file_elt[0:len(file_elt)-1])
                         in_out[order[pref_tag]].append(new_file)
+            if 'create_montage' in order:
+                if not in_out[order['create_montage']]:
+                    in_out[order['create_montage']] = []
+                    for file in in_out[in_idx]:
+                        if "c,rfDC" in file:
+                            file = os.path.dirname(file)
+                        dirname, filename = os.path.split(file)
+                        listing = os.listdir(dirname)
+                        file_mtg = [fi for fi in listing if mtg_type in fi and fi.endswith('_montage.mtg')]
+                        if len(file_mtg) <1 or len(file_mtg) >1:
+                            raise EOFError('There is {0} montage file with the type {1}.'.format(len(file_mtg), mtg_type))
+                        else:
+                            in_out[order['create_montage']].append(file_mtg[0])
+
+
 
         param_vars = results['analysis_param']
         output_name = ''
@@ -505,7 +495,13 @@ class PipelineSetting(dict):
                 output_dict.get_output_values(in_out, taille, order, output_directory, idx_in)  # sub
             for sub in in_out:
                 ##To take into account the prefix and suffix in AnyWave
-                anywave_constraint(order, idx_in, in_out[sub])
+                try:
+                    anywave_constraint(order, idx_in, in_out[sub], cmd_arg.mtg_file)
+                except Exception as er:
+                    self.log_error += 'Error: ' + str(er)
+                    self.write_log()
+                    shutil.rmtree(output_directory)
+                    return self.log_error, output_name, {}
                 idx = 0
                 log_error = []
                 while idx < taille[sub]:
@@ -706,6 +702,7 @@ class Parameters(dict):
     callname = None
     curr_path = None
     curr_bids = None
+    mtg_file = None
     arg_readbids = []
     filename = 'BP_parameters_file.json'
 
@@ -795,7 +792,18 @@ class Parameters(dict):
         return curr_path
 
     def command_arg(self, key, cmd_dict, subject_list):
-        if 'value_selected' in self.keys():
+        if 'incommandline' in self.keys():
+            if self['incommandline']:
+                if 'value_selected' in self.keys():
+                    cmd_dict[key] = self['value_selected']
+                else:
+                    cmd_dict[key] = self['default']
+            else:
+                if 'value_selected' not in self.keys():
+                    self['value_selected'] = self['default']
+                if self['value_selected']:
+                    cmd_dict[key] = ''
+        elif 'value_selected' in self.keys():
             # if isinstance(self['value_selected'], list):
             #     cmd_dict[key] = ', '.join(self['value_selected'])
             # else:
@@ -868,7 +876,7 @@ class Parameters(dict):
                 #cmd_line += determine_input_output_type(output_dict, cnt_tot, order)
                 #order.append(output_dict)
             elif isinstance(self[clef], bool):
-                cmd_line += ' ' + clef
+                cmd_line += ' ' + clef + ' ' + '{}'.format(self[clef])
             elif isinstance(self[clef], int) or isinstance(self[clef], float):
                 cmd_line += ' ' + clef + ' ' + '{}'.format(self[clef])
             elif isinstance(self[clef], list):
@@ -943,7 +951,7 @@ class AnyWave(Parameters):
         self['plugin'] = self.callname
         cmd_end = ''
         if not cmd_line_set:
-            cmd_line_set = ' --run'
+            cmd_line_set = ' --run'# + self.callname
         cmd_base = self.curr_path + cmd_line_set
 
         cmd_line, order = self.chaine_parameters(output_directory, input_p, output_p)
@@ -954,7 +962,7 @@ class AnyWave(Parameters):
         jsonfilename = os.path.normpath(os.path.join(self.derivatives_directory, self.callname + '_parameters' + '.json'))
         pref_flag = False
         suff_flag = False
-
+        mtg_flag = False
         if 'Input' in self.keys():
             del self['Input']
         if 'Output' in self.keys():
@@ -969,6 +977,10 @@ class AnyWave(Parameters):
         if 'output_suffix' in self.keys():
             suff_flag = True
             del self['output_suffix']
+        if 'create_montage' in self.keys() and self['create_montage'] not in ['bipolar_ieeg', 'None']:
+            mtg_flag = True
+            self.mtg_file = self['create_montage']
+            del self['create_montage']
         with open(jsonfilename, 'w') as json_file:
             if 'modality' in self and isinstance(self['modality'], list):
                 self['modality'] = self['modality'][-1]
@@ -1022,6 +1034,10 @@ class AnyWave(Parameters):
             order['--output_suffix'] = cnt_tot
             cmd_line += ' --output_suffix {' + str(cnt_tot) + '}'
             cnt_tot += 1
+        if mtg_flag:
+            order['create_montage'] = cnt_tot
+            cmd_line += ' --create_montage {' + str(cnt_tot) + '}'
+            cnt_tot +=1
         return cmd_line, order
 
     def verify_log_for_errors(self, input, x=None):
@@ -1453,40 +1469,49 @@ class InputArguments(Parameters):
         # modality = [elt for elt in bids.ModalityType.get_list_subclasses_names() if elt in subject['modality']]
         # if not modality:
         #     modality = [elt for elt in bids.ModalityType.get_list_subclasses_names() if any(elmt in subject['modality'] for elmt in eval('bids.' + elt + '.allowed_modalities'))]
-        if self.deriv_input:
+        if self.deriv_input and not self['deriv-folder'][0].startswith('freesurfer'):
             self.curr_bids.is_pipeline_present(self['deriv-folder'][0])
             for sub in self.curr_bids.curr_pipeline['Pipeline']['SubjectProcess']:
                 if sub['sub'] == sub_id:
                     for mod in subject['modality']:
                         if not mod.endswith('Process'):
                             mod = mod + 'Process'
-                        for elt in sub[mod]:
-                            is_equal = [True]
-                            for key in subject:
-                                if key == 'modality' or key == 'deriv-folder':
-                                    continue
-                                elif key == 'mod':
-                                    if elt['modality'] in subject[key]:
+                        if sub[mod]:
+                            for elt in sub[mod]:
+                                is_equal = [True]
+                                for key in subject:
+                                    if key == 'modality' or key == 'deriv-folder':
+                                        continue
+                                    elif key == 'mod':
+                                        if elt['modality'] in subject[key]:
+                                            is_equal.append(True)
+                                        else:
+                                            is_equal.append(False)
+                                    elif elt[key] in subject[key]:
                                         is_equal.append(True)
                                     else:
                                         is_equal.append(False)
-                                elif elt[key] in subject[key]:
-                                    is_equal.append(True)
-                                else:
-                                    is_equal.append(False)
-                                # elif key == 'fileLoc':
-                                #     if elt[key].endswith(self['filetype']):
-                                #         is_equal.append(True)
-                                #     else:
-                                #         is_equal.append(False)
-                            if all(is_equal) and elt['fileLoc'].endswith(self['filetype']):
-                                key_attributes = [clef for clef in SubjectToAnalyse.keylist if not clef == 'modality']
-                                for key in key_attributes:
-                                    if key in elt and elt[key] and key not in temp_att:
-                                        temp_att[key] = [elt[key]]
-                                    elif key in elt and elt[key] and elt[key] not in temp_att[key]:
-                                        temp_att[key].append(elt[key])
-                                input_files.append(os.path.join(self.bids_directory, elt['fileLoc']))
+                                    # elif key == 'fileLoc':
+                                    #     if elt[key].endswith(self['filetype']):
+                                    #         is_equal.append(True)
+                                    #     else:
+                                    #         is_equal.append(False)
+                                if all(is_equal) and elt['fileLoc'].endswith(self['filetype']):
+                                    key_attributes = [clef for clef in SubjectToAnalyse.keylist if not clef == 'modality']
+                                    for key in key_attributes:
+                                        if key in elt and elt[key] and key not in temp_att:
+                                            temp_att[key] = [elt[key]]
+                                        elif key in elt and elt[key] and elt[key] not in temp_att[key]:
+                                            temp_att[key].append(elt[key])
+                                    input_files.append(os.path.join(self.bids_directory, elt['fileLoc']))
+        elif self.deriv_input and self['deriv-folder'][0].startswith('freesurfer'):
+            dir_free, fle_type = self['filetype'].split('/*')
+            sub_path = os.path.join(self.curr_bids.dirname, 'derivatives', self['deriv-folder'][0], 'sub-' + sub_id, dir_free)
+            if os.path.exists(sub_path):
+                listing = os.listdir(sub_path)
+                file = [fle for fle in listing if fle.endswith(fle_type)]
+                if len(file) == 1:
+                    input_files.append(os.path.join(sub_path, file[0]))
         else:
             for sub in self.curr_bids['Subject']:
                 if sub['sub'] == sub_id:
@@ -1686,7 +1711,7 @@ class Arguments(Parameters):
     read_value = ['read', 'elementstoread', 'multipleselection']
     list_value = ['possible_value', 'multipleselection']
     file_value = ['fileLoc', 'extension']
-    bool_value = ['default']
+    bool_value = ['default', 'incommandline']
     bids_value = ['readbids', 'type']
 
     def copy_values(self, input_dict):
@@ -1867,387 +1892,6 @@ def verify_subject_has_parameters(curr_bids, sub_id, input_vars, param=None):
         return warn_txt, err_txt
 
     return warn_txt, err_txt
-
-
-class Interface(dict):
-
-    def __init__(self, bids_data):
-        self.bids_data = bids_data
-        self.subject = [sub['sub'] for sub in self.bids_data['Subject']]
-        self.vars_interface()
-
-    def copy_values(self, input_dict):
-        for key in input_dict:
-            self[key] = input_dict[key]
-
-    def vars_interface(self):
-        def check_numerical_value(element):
-            is_numerical = False
-            punctuation = ',.?!:'
-            temp = element.translate(str.maketrans('', '', punctuation))
-            temp = temp.strip('YymM ')
-            if temp.isnumeric():
-                is_numerical = True
-            return is_numerical
-
-        participant_dict = self.bids_data['ParticipantsTSV']
-        req_keys = self.bids_data.requirements['Requirements']['Subject']['keys']
-        display_dict = {key: value for key, value in req_keys.items() if value or 'age' in key or 'duration' in key}
-        # for key, value in req_keys.items():
-            # if value:
-            #     display_dict[key] = value
-            # elif 'age' in key:
-            #     display_dict[key] = value
-            # elif 'duration' in key:
-            #     display_dict[key] = value
-        criteria = participant_dict.header
-        key_list = display_dict.keys()
-        for key in key_list:
-            idx = criteria.index(key)
-            is_string = False
-            display_value = []
-            for val_part in participant_dict[1::]:
-                is_number = check_numerical_value(val_part[idx])
-                if is_number and display_dict[key]:
-                    display_value.append(val_part[idx])
-                elif is_number:
-                    display_value.append('min_' + key)
-                    display_value.append('max_' + key)
-                    is_string = True
-                else:
-                    l_elt = val_part[idx].split(', ')
-                    for l in l_elt:
-                        display_value.append(l)
-            display_value = list(set(display_value))
-            if is_string:
-                self[key] = {}
-                display_value = sorted(display_value, reverse=True)
-                if 'n/a' in display_value:
-                    display_value.remove('n/a')
-                elif 'N/A' in display_value:
-                    display_value.remove('N/A')
-                self[key]['attribut'] = 'StringVar'
-                self[key]['value'] = [value for value in display_value]
-            elif display_value:
-                display_value = list(set(display_value).intersection(set(display_dict[key])))
-                if len(display_value) == 1 and not 'n/a' in display_value:
-                    self[key] = {}
-                    self[key]['attribut'] = 'Label'
-                    self[key]['value'] = [value for value in display_value]
-                elif len(display_value) > 1:
-                    self[key] = {}
-                    self[key]['attribut'] = 'Variable'
-                    self[key]['value'] = [value for value in display_value]
-
-    def get_parameter(self):
-        res_dict = dict()
-        for key in self:
-            att_type = self[key]['attribut']
-            val_temp = self[key]['value']
-            if att_type == 'Variable':
-                for val in self[key]['results']:
-                    if val.get():
-                        idx = self[key]['results'].index(val)
-                        try:
-                            res_dict[key].append(val_temp[idx])
-                        except:
-                            res_dict[key] = []
-                            res_dict[key].append(val_temp[idx])
-            elif att_type == 'StringVar':
-                num_value = False
-                if isinstance(val_temp, list):
-                    for id_var in val_temp:
-                        if id_var.get().isalnum():
-                            if id_var._name.startswith('min'):
-                                minA = int(id_var.get())
-                                num_value = True
-                            elif id_var._name.startswith('max'):
-                                maxA = int(id_var.get())
-                                num_value = True
-                            else:
-                                res_dict[key] = id_var.get()
-                    if num_value:
-                        res_dict[key] = range(minA, maxA)
-                else:
-                    res_dict[key] = val_temp.get()
-                if key in res_dict and key in res_dict[key]:
-                    res_dict[key] = res_dict[key].replace('_'+key, '')
-            elif att_type == 'Listbox':
-                res_dict[key] = val_temp.get()
-            elif att_type == 'Bool':
-                if val_temp.get() == True:
-                    res_dict[key] = True
-            elif att_type == 'Label':
-                res_dict[key] = val_temp
-            elif att_type == 'File':
-                if len(val_temp) >1 and val_temp[1]:
-                    if isinstance(val_temp[1], list):
-                        res_dict[key] = ', '.join(val_temp[1])
-                    else:
-                        res_dict[key] = val_temp[1]
-
-        return res_dict
-
-    def get_subject_list(self, input_dict):
-        subject_list = []
-        for elt in self.bids_data['ParticipantsTSV'][1::]:
-            elt_in = []
-            for key, value in input_dict.items():
-                idx_key = self.bids_data['ParticipantsTSV'].header.index(key)
-                if isinstance(value, range):
-                    elt[idx_key] = elt[idx_key].replace(',', '.')
-                    age_p = round(float(elt[idx_key].rstrip('YyMm ')))
-                    if age_p in value:
-                        elt_in.append(True)
-                elif isinstance(value, list):
-                    for val in value:
-                        if val in elt[idx_key]:
-                            elt_in.append(True)
-                        else:
-                            elt_in.append(False)
-                elif isinstance(value, str):
-                    if value in elt[idx_key]:
-                        elt_in.append(True)
-                    else:
-                        elt_in.append(False)
-            elt_in = list(set(elt_in))
-            if len(elt_in) == 1 and elt_in[0] is True:
-                if 'sub-' in elt[0]:
-                    elt[0] = elt[0].split('sub-')[1]
-                subject_list.append(elt[0])
-        return subject_list
-
-
-class ParameterInterface(Interface):
-    def __init__(self, bids_data, parameter_soft=None):
-        self.bids_data = bids_data
-        if parameter_soft:
-            self.parameters = {key: value for key, value in parameter_soft.items() if key not in ['Input', 'Output', 'Callname', 'command_line_base', 'Intermediate']}
-            self.vars_interface()
-
-    def vars_interface(self):
-        for key in self.parameters:
-            self[key] = {}
-            if key == 'Mode':
-                if len(self.parameters[key]) > 1:
-                    self[key]['attribut'] = 'Listbox'
-                    self[key]['value'] = self.parameters[key]
-                elif len(self.parameters[key]) == 1:
-                    self[key]['attribut'] = 'Label'
-                    self[key]['value'] = self.parameters[key][-1]
-            else:
-                keys = list(self.parameters[key].keys())
-                if keys == Arguments.unit_value:
-                    self[key]['attribut'] = 'StringVar'
-                    self[key]['value'] = str(self.parameters[key]['default']) + self.parameters[key]['unit'] + '_' + key
-                    self[key]['unit'] = self.parameters[key]['unit']
-                elif keys == Arguments.list_value:
-                    if self.parameters[key]['multipleselection']:
-                        st_type = 'Variable'
-                    else:
-                        st_type = 'Listbox'
-                    self[key]['attribut'] = st_type
-                    self[key]['value'] = self.parameters[key]['possible_value']
-                elif keys == Arguments.file_value:  # A revoir
-                    self[key]['attribut'] = 'File'
-                    self[key]['value'] = [self.parameters[key]['extension']]
-                elif keys == Arguments.bool_value:
-                    self[key]['attribut'] = 'Bool'
-                    self[key]['value'] = self.parameters[key]['default']
-                elif keys == Arguments.read_value:
-                    if self.parameters[key]['multipleselection']:
-                        st_type = 'Variable'
-                    else:
-                        st_type = 'Listbox'
-                    self[key]['attribut'] = st_type
-                    self[key]['value'] = self.reading_file(key)
-                elif keys == Arguments.bids_value:
-                    del self[key]
-                else:
-                    raise EOFError(
-                        'The keys in Parameters of your JSON file are not conform.\n Please modify it according to the template given.\n')
-
-    def reading_file(self, key):
-        def read_file(file, elements):
-            param = []
-            name, ext = os.path.splitext(file)
-            if ext == '.csv':
-                split_value = ', '
-            else:
-                split_value = '\t'
-            f = open(file, 'r')
-            f_cont = f.readlines()
-            if elements == 'header':
-                header = f_cont[0].split(split_value)
-                for val in header:
-                    param.append(val)
-                f.close()
-                return param
-            elif elements.isnumeric():
-                idx = int(elements)
-            elif elements:
-                line = f_cont[0].split('\n')[0]
-                header = line.split(split_value)
-                idx = header.index(elements)
-            else:
-                idx = 0
-            for line in f_cont[1::]:
-                line = line.split('\n')[0]
-                trial_type = line.split(split_value)
-                param.append(trial_type[idx])
-            f.close()
-            return param
-
-        def compare_listes(liste_final, liste_file):
-            is_same = True
-            sX = set(liste_final)
-            sY = set(liste_file)
-            set_common = sX - sY
-            if not set_common == sX:
-                is_same = False
-            for elt in liste_file:
-                if elt not in liste_final:
-                    liste_final.append(elt)
-            return is_same
-
-        reading_file = self.parameters[key]['read'].strip('*')
-        elements = self.parameters[key]['elementstoread']
-        mark_to_remove = ['?', '***', '*']
-        param = []
-        is_same = True
-        for subject in os.listdir(self.bids_data.cwdir):
-            if subject.endswith(reading_file) and os.path.isfile(os.path.join(self.bids_data.cwdir, subject)):
-                file_param = read_file(os.path.join(self.bids_data.cwdir, subject), elements)
-                if not param:
-                    param = [elt for elt in file_param]
-                else:
-                    is_same = compare_listes(param, file_param)
-                break
-            elif subject.startswith('sub') and os.path.isdir(os.path.join(self.bids_data.cwdir, subject)):
-                for session in os.listdir(os.path.join(self.bids_data.cwdir, subject)):
-                    if os.path.isdir(os.path.join(self.bids_data.cwdir, subject, session)):
-                        for mod in os.listdir(os.path.join(self.bids_data.cwdir, subject, session)):
-                            if os.path.isdir(os.path.join(self.bids_data.cwdir, subject, session, mod)):
-                                with os.scandir(os.path.join(self.bids_data.cwdir, subject, session, mod)) as it:
-                                    for entry in it:
-                                        if entry.name.endswith(reading_file):
-                                            file_param = read_file(entry.path, elements)
-                                            if not param:
-                                                param = [elt for elt in file_param]
-                                            else:
-                                                is_same = compare_listes(param, file_param)
-                            elif os.path.isfile(
-                                    os.path.join(self.bids_data.cwdir, subject, session, mod)) and mod.endswith(
-                                    reading_file):
-                                file_param = read_file(os.path.join(self.bids_data.cwdir, subject, session, mod),
-                                                       elements)
-                                if not param:
-                                    param = [elt for elt in file_param]
-                                else:
-                                    is_same = compare_listes(param, file_param)
-        param = list(set(param))
-        param.sort()
-        return [par for par in param if not par in mark_to_remove]
-
-
-class InputParameterInterface(Interface):
-    def __init__(self, bids_data, parameter_soft_input=None):
-        self.bids_data = bids_data
-        if parameter_soft_input:
-            self.parameters = parameter_soft_input
-            mod_list = bids.Electrophy.get_list_subclasses_names() + bids.Imaging.get_list_subclasses_names()
-            if self.parameters.deriv_input:
-                mod_list = bids.ElectrophyProcess.get_list_subclasses_names() + bids.ImagingProcess.get_list_subclasses_names()
-            keylist = [elt for key in mod_list for elt in eval('bids.' + key + '.keylist') if not (
-                     elt in bids.BidsJSON.get_list_subclasses_names() or elt in bids.BidsTSV.get_list_subclasses_names()
-                     or elt in bids.BidsFreeFile.get_list_subclasses_names() or elt.endswith('Loc') or elt.endswith(
-                'modality') or elt == 'sub' or elt.endswith('Labels'))] #elt.endswith('JSON') or elt.endswith('TSV')
-            self.keylist = list(set(keylist))
-            self.vars_interface()
-
-    def vars_interface(self):
-        if self.parameters is not None:
-            if self.parameters.deriv_input:
-                self['deriv-folder'] = dict()
-                self['deriv-folder']['attribut'] = 'Listbox'
-                deriv_list = [elt for elt in os.listdir(os.path.join(self.bids_data.cwdir, 'derivatives'))if
-                                  elt not in ['log', 'parsing', 'parsing_old', 'log_old'] and os.path.isdir(os.path.join(self.bids_data.cwdir, 'derivatives',elt))]
-                self['deriv-folder']['value'] = deriv_list
-            self['modality'] = dict()
-            if self.parameters['modality']:
-                if len(self.parameters['modality']) > 1:
-                    self['modality']['attribut'] = 'Listbox'
-                    self['modality']['value'] = self.parameters['modality']
-                else:
-                    self['modality']['value'] = self.parameters['modality'][-1]
-                    self['modality']['attribut'] = 'Label'
-            else:
-                self['modality']['attribut'] = 'Listbox'
-                self['modality']['value'] = bids.Electrophy.get_list_subclasses_names() + bids.Imaging.get_list_subclasses_names()
-        else:
-            self = {'modality': {}}
-            self['modality']['attribut'] = 'Listbox'
-            self['modality']['value'] = bids.Imaging.get_list_subclasses_names() + bids.Electrophy.get_list_subclasses_names()
-
-        if self['modality']['attribut'] == 'Label':
-            modality = [self['modality']['value']]
-        else:
-            modality = self['modality']['value']
-        if not self.parameters.deriv_input:
-            for sub in self.bids_data['Subject']:
-                for mod in sub:
-                    if mod and mod in modality:
-                        keys = [elt for elt in self.keylist if elt in eval('bids.' + mod + '.keylist') and elt != 'sub']
-                        if mod in bids.Imaging.get_list_subclasses_names() and 'mod' not in keys:
-                            keys.append('mod')
-                        if sub[mod]:
-                            self.get_values(mod, keys, sub)
-        else:
-            for pip in self.bids_data['Derivatives'][0]['Pipeline']:
-                sub_list = [sub for sub in pip['SubjectProcess']]
-                for sub in sub_list:
-                    for mod in sub:
-                        if mod and mod.split('Process')[0] in modality:
-                            keys = [elt for elt in self.keylist if
-                                    elt in eval('bids.' + mod + '.keylist') and elt != 'sub']
-                            if mod in bids.ImagingProcess.get_list_subclasses_names() and 'mod' not in keys:
-                                keys.append('mod')
-                            if sub[mod]:
-                                self.get_values(mod, keys, sub)
-        clefs = [key for key in self]
-        for key in clefs:
-            if self[key]['attribut'] == 'Label' and key not in ['modality', 'ses']:
-                del self[key]
-        #Ecrire qqch si juste la modality en label et rien d'autre
-
-    def get_values(self, mod, keys, sub):
-        for key in keys:
-            value = [elt[key] for elt in sub[mod]]
-            if key == 'mod':
-                value = [elt['modality'] for elt in sub[mod]]
-            value = sorted(list(set(value)))
-            # if '' in value:
-            #     value.remove('')
-            if value: #and value[0] is not '':
-                # if key == 'modality':
-                #     if self[key]['attribut'] == 'Label':
-                #         self[key]['value'] = value
-                #     else:
-                #         self[key]['value'].extend(value)
-                if key == 'ses' and '' in value:
-                    value.remove('')
-                if not key in self:
-                    self[key] = {}
-                    self[key]['value'] = value
-                    self[key]['attribut'] = 'IntVar'
-                else:
-                    self[key]['value'].extend(value)
-                self[key]['value'] = sorted(
-                        list(set(self[key]['value'])))
-                if len(self[key]['value']) > 1:
-                    self[key]['attribut'] = 'Variable'
-                elif len(self[key]['value']) == 1:
-                    self[key]['attribut'] = 'Label'
 
 
 def main(argv):

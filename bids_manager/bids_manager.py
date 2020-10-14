@@ -25,6 +25,7 @@
 
 import bids_manager.ins_bids_class as bids
 from bids_pipeline import pipeline_class as pip
+import bids_pipeline.interface_class as itf
 import os
 import json
 import platform
@@ -34,6 +35,7 @@ from tkinter import ttk, Tk, Menu, messagebox, filedialog, Frame, Listbox, scrol
     TOP, BOTTOM, BROWSE, MULTIPLE, EXTENDED, ACTIVE, RIDGE, Scrollbar, CENTER, OptionMenu, Checkbutton, Radiobutton, GROOVE, \
     Variable, Canvas, font
 from bids_pipeline.convert_process_file import write_big_table
+from ctypes import windll
 try:
     from importlib import reload
 except:
@@ -44,7 +46,7 @@ class BidsManager(Frame, object):  # !!!!!!!!!! object is used to make the class
     # (https://stackoverflow.com/questions/18171328/python-2-7-super-error) While it is true that Tkinter uses
     # old-style classes, this limitation can be overcome by additionally deriving the subclass Application from object
     # (using Python multiple inheritance) !!!!!!!!!
-    version = '0.2.7'
+    version = '0.2.8'
     bids_startfile = os.path.join(os.getcwd(), 'Data')
     import_startfile = os.path.join(os.getcwd(), 'Data')
     folder_software = os.path.join(os.getcwd(), 'SoftwarePipeline')
@@ -124,6 +126,7 @@ class BidsManager(Frame, object):  # !!!!!!!!!! object is used to make the class
 
         #sattistic menu
         statistic_menu.add_command(label='Create statistic table', command= lambda: self.createtablestats(), state=DISABLED)
+
         menu_bar.add_cascade(label="BIDS", underline=0, menu=bids_menu)
         menu_bar.add_cascade(label="Uploader", underline=0, menu=uploader_menu)
         menu_bar.add_cascade(label="Issues", underline=0, menu=issue_menu)
@@ -191,9 +194,9 @@ class BidsManager(Frame, object):  # !!!!!!!!!! object is used to make the class
             self.make_available()
         if import_data_flag:
             flag_import = False
-            upload_dir = [elt['path'] for elt in self.curr_bids.issues['UpldFldrIssue'] + self.curr_bids.issues['ImportIssue']]
+            upload_dir = [os.path.normpath(elt['path']) for elt in self.curr_bids.issues['UpldFldrIssue'] + self.curr_bids.issues['ImportIssue']]
             upload_dir = list(set(upload_dir))
-            if len(upload_dir) > 1 or (len(upload_dir) == 1 and self.upload_dir != upload_dir[0]):
+            if len(upload_dir) > 1 or (len(upload_dir) == 1 and os.path.normpath(self.upload_dir) != upload_dir[0]):
                 if self.upload_dir is not None and self.upload_dir not in upload_dir:
                     upload_dir.append(self.upload_dir)
                 self.upload_dir = None
@@ -812,9 +815,22 @@ class BidsManager(Frame, object):  # !!!!!!!!!! object is used to make the class
                 self.update_text('No upload directory is set.')
         except Exception as err:
             self.update_text(self.curr_bids.curr_log + str(err))
-        self.curr_data2import = None
-        self.upload_dir = None
-        self.change_menu_state(self.uploader_menu, start_idx=3, state=DISABLED)
+        if not os.path.exists(self.curr_data2import.dirname):
+            self.curr_data2import = None
+            self.upload_dir = None
+            self.change_menu_state(self.uploader_menu, start_idx=3, state=DISABLED)
+        else:
+            req_path = os.path.join(self.curr_bids.dirname, 'code', 'requirements.json')
+            self.curr_data2import = bids.Data2Import(self.upload_dir, req_path)
+            flag=False
+            if not self.curr_data2import.is_empty():
+                flag = messagebox.askyesno('Upload directory', 'Do you want to continue with the upload directory {}?'.format(self.upload_dir))
+            if self.curr_data2import.is_empty() or not flag:
+                self.curr_data2import = None
+                self.upload_dir = None
+                self.change_menu_state(self.uploader_menu, start_idx=3, state=DISABLED)
+            else:
+                self.update_text('Verify your upload directory {}.'.format(self.curr_data2import.dirname), delete_flag=False)
         self.make_available()
 
     def close_window(self):
@@ -866,6 +882,7 @@ class BidsManager(Frame, object):  # !!!!!!!!!! object is used to make the class
         self.make_idle('BIDS Uploader is running')
         try:
             call_generic_uplader(self.curr_bids)
+            self.update()
         except:
             self.update_text('BIDS uploader crashed')
             self.make_available()
@@ -1668,6 +1685,40 @@ class ModifDialog(TemplateDialog):
         self.destroy()
 
 
+class ModifName(TemplateDialog):
+
+    def __init__(self, parent, name):
+        self.dev_name = name
+        super().__init__(parent)
+
+    def body(self, parent):
+        self.title = Label(parent, text='You are about to change the name of {}'.format(self.dev_name), foreground='blue')
+        self.title.grid(row=1, column=1)
+        variant = self.dev_name.split('-')
+        if len(variant) >1:
+            self.explanation = Label(parent, text='Warning: Only the variant can be changed, in this case {}'.format(variant[1]))
+        else:
+            self.explanation = Label(parent, text='Warning: The pipeline name cannot be changed, only a variant can be added.')
+        self.explanation.grid(row=2, column=1)
+        self.change_name = Label(parent, text='New variant name for {}:'.format(self.dev_name))
+        self.new_name = Entry(parent)
+        self.change_name.grid(row=3, column=1)
+        self.new_name.grid(row=3, column=2)
+        self.ok_cancel_button(parent, row=4)
+
+    def ok(self):
+        self.results = self.new_name.get()
+        self.new_name.delete(0, END)
+        self.destroy()
+
+    def cancel(self):
+        if self.parent is not None:
+            self.parent.focus_set()
+        self.results = None
+        self.new_name.delete(0, END)
+        self.destroy()
+
+
 class FormDialog(TemplateDialog):
 
     def __init__(self, parent, input_dict, disabled=None, options=None, required_keys=None, required_protocol_keys=None, title=None):
@@ -1879,6 +1930,8 @@ class BidsBrickDialog(FormDialog):
         pop_menu = Menu(self.key_listw[key], tearoff=0)
         pop_menu.add_command(label='Show {}'.format(key), command=lambda ev=event, k=key: self.open_new_window(k, ev))
         pop_menu.add_command(label='Delete {}'.format(key), command=lambda k=key: self.remove_element(k))
+        if key == 'Derivatives':
+            pop_menu.add_command(label='Rename {}'.format(key), command=lambda k=key: self.rename_derivatives(k))
         pop_menu.post(event.x_root, event.y_root)
 
     @staticmethod
@@ -2176,6 +2229,44 @@ class BidsBrickDialog(FormDialog):
                 if isinstance(self.key_entries[key], Entry) and not self.key_entries[key].get() == self.main_brick[key]:
                     self.main_brick[key] = self.key_entries[key].get()
 
+    def rename_derivatives(self, k):
+        idx = self.key_listw[k].curselection()[0]
+        dev_name = self.main_brick['Derivatives'][0]['Pipeline'][idx]['name']
+        modif_name = ModifName(self, dev_name)
+        pip_variant = dev_name.split('-')
+        pip_name = pip_variant[0]
+        if modif_name.results is not None:
+            new_variant = modif_name.results
+            if pip_name in new_variant:
+                new_variant = new_variant.replace(pip_name, '')
+            if '-' in new_variant:
+                new_variant = new_variant.replace('-', '')
+            new_pip_name = pip_name + '-' + new_variant
+            #rename in parsing and change the folder name and dataset_desc
+            if os.path.exists(os.path.join(self.main_brick.dirname, 'derivatives', dev_name)):
+                os.rename(os.path.join(self.main_brick.dirname, 'derivatives', dev_name), os.path.join(self.main_brick.dirname, 'derivatives', new_pip_name))
+                self.main_brick['Derivatives'][0]['Pipeline'][idx]['name'] = new_pip_name
+                for sub in self.main_brick['Derivatives'][0]['Pipeline'][idx]['SubjectProcess']:
+                    for mod in sub:
+                        if mod in bids.Process.get_list_subclasses_names() and sub[mod]:
+                            for elt in sub[mod]:
+                                elt['fileLoc'] = elt['fileLoc'].replace(dev_name, new_pip_name)
+                        elif mod == 'Scans' and sub[mod]:
+                            for scan in sub[mod]:
+                                scan['fileLoc'] = scan['fileLoc'].replace(dev_name, new_pip_name)
+                self.main_brick['Derivatives'][0]['Pipeline'][idx]['DatasetDescJSON']['Name'] = new_pip_name
+                if 'PipelineDescription' in self.main_brick['Derivatives'][0]['Pipeline'][idx]['DatasetDescJSON'].keys():
+                    if 'fileLoc' in self.main_brick['Derivatives'][0]['Pipeline'][idx]['DatasetDescJSON']['PipelineDescription']:
+                        self.main_brick['Derivatives'][0]['Pipeline'][idx]['DatasetDescJSON']['PipelineDescription']['fileLoc'] = \
+                        self.main_brick['Derivatives'][0]['Pipeline'][idx]['DatasetDescJSON']['PipelineDescription'][
+                            'fileLoc'].replace(dev_name, new_pip_name)
+                self.main_brick['Derivatives'][0]['Pipeline'][idx]['DatasetDescJSON'].write_file(os.path.join(self.main_brick.dirname, 'derivatives', new_pip_name, bids.DatasetDescJSON.filename))
+                self.main_brick.save_as_json()
+            else:
+                messagebox.showerror('Error', 'The derivative {} doesn"t exist'.format(dev_name))
+        self.populate_list(self.key_listw[k], self.main_brick[k])
+        self.config(cursor="")
+
 
 class SmallDialog(TemplateDialog):
 
@@ -2346,17 +2437,17 @@ class BidsSelectDialog(TemplateDialog):
         self.frame_soft = {}
         self.batch = False
         self.batch_file = None
-        self.subject_interface = pip.Interface(self.bids_data)
+        self.subject_interface = itf.Interface(self.bids_data)
         if analysis_dict and isinstance(analysis_dict, pip.PipelineSetting):
             self.soft_name = analysis_dict.jsonfilename
             try:
-                self.parameter_interface['Parameters'] = pip.ParameterInterface(self.bids_data, analysis_dict['Parameters'])
+                self.parameter_interface['Parameters'] = itf.ParameterInterface(self.bids_data, analysis_dict['Parameters'])
                 self.parameter_interface['Input'] = {}
                 for cnt, elt in enumerate(analysis_dict['Parameters']['Input']):
                     tag_val = elt['tag']
                     if not tag_val:
                         tag_val = 'in'+str(cnt)
-                    self.parameter_interface['Input']['Input_'+tag_val] = pip.InputParameterInterface(self.bids_data, elt)
+                    self.parameter_interface['Input']['Input_'+tag_val] = itf.InputParameterInterface(self.bids_data, elt)
             except EOFError as err:
                 messagebox.showerror('ERROR', err)
                 return
@@ -2378,15 +2469,16 @@ class BidsSelectDialog(TemplateDialog):
         self.parameter_list[soft_name] = {}
         self.parameter_list[soft_name]['JsonName'] = soft_name
         for key in self.parameter_interface:
-            if isinstance(self.parameter_interface[key], pip.Interface):
+            if isinstance(self.parameter_interface[key], itf.Interface):
                 self.parameter_list[soft_name][key] = type(self.parameter_interface[key])(self.bids_data)
                 self.parameter_list[soft_name][key].copy_values(self.parameter_interface[key])
             elif isinstance(self.parameter_interface[key], dict):
                 self.parameter_list[soft_name][key] = {}
                 for clef in self.parameter_interface[key]:
-                    if isinstance(self.parameter_interface[key][clef], pip.Interface):
+                    if isinstance(self.parameter_interface[key][clef], itf.Interface):
                         self.parameter_list[soft_name][key][clef] = type(self.parameter_interface[key][clef])(self.bids_data)
                         self.parameter_list[soft_name][key][clef].copy_values(self.parameter_interface[key][clef])
+
 
     def body(self, parent):
         if self.batch:
@@ -2476,13 +2568,13 @@ class BidsSelectDialog(TemplateDialog):
             try:
                 nbr_soft = len(self.frame_soft.keys())
                 analysis_dict = pip.PipelineSetting(self.bids_data, soft_name)
-                self.parameter_interface['Parameters'] = pip.ParameterInterface(self.bids_data, analysis_dict['Parameters'])
+                self.parameter_interface['Parameters'] = itf.ParameterInterface(self.bids_data, analysis_dict['Parameters'])
                 self.parameter_interface['Input'] = {}
                 for cnt, elt in enumerate(analysis_dict['Parameters']['Input']):
                     tag_val = elt['tag']
                     if not tag_val:
                         tag_val = 'in' + str(cnt)
-                    self.parameter_interface['Input']['Input_' + tag_val] = pip.InputParameterInterface(self.bids_data, elt)
+                    self.parameter_interface['Input']['Input_' + tag_val] = itf.InputParameterInterface(self.bids_data, elt)
                     if 'deriv-folder' in self.parameter_interface['Input']['Input_' + tag_val]:
                         if nbr_soft >= 1:
                             for nb in range(1, nbr_soft+1, 1):
@@ -2637,6 +2729,8 @@ class BidsSelectDialog(TemplateDialog):
             return
         else:
             name = self.parameter_list[self.soft_name]['Software']
+            if '/' in name:
+                name = name.replace('/', '-')
             bp_an = os.path.join(bp_dir, 'analysis_done')
             os.makedirs(bp_an, exist_ok=True)
             filename = name + '_' + author + '_' + date + '_saved.json'
@@ -2750,8 +2844,12 @@ class BidsSelectDialog(TemplateDialog):
         return max_col, cnt
 
     def ask4file(self, file):
-        filetypes = ('Files', file)
-        filename = filedialog.askopenfilename(title='Select file', initialdir=self.bids_data.cwdir, filetypes=[filetypes])
+        #ajouter directory ask
+        if file == ['dir']:
+            filename = filedialog.askdirectory(title='Select directory', initialdir=self.bids_data.cwdir)
+        else:
+            filetypes = ('Files', file)
+            filename = filedialog.askopenfilename(title='Select file', initialdir=self.bids_data.cwdir, filetypes=[filetypes])
         if len(file) <= 1:
             file.append(filename)
         else:
@@ -3211,6 +3309,10 @@ class RequirementsDialog(TemplateDialog):
                                 keys[key].append(val.replace(' ', ''))
                             else:
                                 keys[key].append(val)
+                        keys[key].sort()
+                        # if len(list_val) < 2:
+                        #     list_val = value.split(',')
+                        #keys[key] = [val.replace(' ', '') for val in list_val]
                     if self.req_button[i].get():
                         required_keys.append(key)
 
@@ -3294,6 +3396,7 @@ class RequirementsDialog(TemplateDialog):
                                     else:
                                         key_dict[key].append(val)
                             key_dict[key] = list(set(key_dict[key]))
+                            key_dict[key].sort()
                         else:
                             if mod in verif_type:
                                 if key in verif_type[mod] and key != 'run':
@@ -3699,6 +3802,8 @@ def run_app():
                      'or any later version.\n'
     print(notice_license)
     sleep(0.2)
+    if platform.system() == 'Windows':
+        windll.shcore.SetProcessDpiAwareness(1)
     root = Tk()
     width = root.winfo_screenwidth()
     height = root.winfo_screenheight()

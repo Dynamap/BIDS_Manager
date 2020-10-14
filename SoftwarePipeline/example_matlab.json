@@ -41,13 +41,16 @@
    "unit": ""
   },
   "degree": {
-   "default": true
+   "default": true,
+   "incommandline": true
   },
   "strength": {
-   "default": true
+   "default": true,
+   "incommandline": true
   },
   "all_markers_together": {
-   "default": true
+   "default": true,
+   "incommandline": true
   }
  }
 }

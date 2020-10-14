@@ -50,6 +50,7 @@ from generic_uploader.validationdialog import Ui_Dialog
 from generic_uploader.micromed import anonymize_micromed
 from generic_uploader.read_seeg_images_header import read_headers
 from generic_uploader.anonymizeDicom import anonymize as anonymize_dcm
+from generic_uploader.anonymize_edf import anonymize_edf
 # import pysftp
 # import paramiko
 from bids_manager import ins_bids_class
@@ -907,41 +908,6 @@ class GenericUploader(QtWidgets.QMainWindow, Ui_MainWindow):
                 if key != "modality":
                     items = self.requirements['Requirements'][modality_class]['keys'][key]
                     keys_dict[key] = items
-                # if key == 'ses':
-                #     items = self.requirements.requirements['Requirements'][modality_class]['keys']['ses']
-                #     if type(items) is list:
-                #         ses_list = ses_list + items
-                #     else:
-                #         ses_list.append(items)
-                # # if 'modality' in self.requirements.requirements['Requirements'][modality_class]['keys']:
-                # if key == 'acq':
-                #     items = self.requirements.requirements['Requirements'][modality_class]['keys']['acq']
-                #     if type(items) is list:
-                #         acq_list = acq_list + items
-                #     else:
-                #         acq_list.append(items)
-                #     #acq_list = acq_list + self.requirements.requirements['Requirements'][modality_class]['keys']['acq']
-                # if key == 'task':
-                #     items = self.requirements.requirements['Requirements'][modality_class]['keys']['task']
-                #     if type(items) is list:
-                #         task_list = task_list + items
-                #     else:
-                #         task_list.append(items)
-                #     #task_list = task_list + self.requirements.requirements['Requirements'][modality_class]['keys']['task']
-                # if key == 'run':
-                #     #run_list = run_list + self.requirements.requirements['Requirements'][modality_class]['keys']['run']
-                #     items = self.requirements.requirements['Requirements'][modality_class]['keys']['run']
-                #     if type(items) is list:
-                #         run_list = run_list + items
-                #     else:
-                #         run_list.append(items)
-                # if key == 'space':
-                #     #run_list = run_list + self.requirements.requirements['Requirements'][modality_class]['keys']['run']
-                #     items = self.requirements.requirements['Requirements'][modality_class]['keys']['space']
-                #     if type(items) is list:
-                #         space_list = space_list + items
-                #     else:
-                #         space_list.append(items)
             modality_list = modality_list + (eval("ins_bids_class." + modality_class + ".allowed_modalities"))
             keys_dict['modality'] = modality_list
         # ses_list = list(set(ses_list))
@@ -1010,151 +976,6 @@ class GenericUploader(QtWidgets.QMainWindow, Ui_MainWindow):
         QtWidgets.qApp.processEvents()
 
 
-    def import_neuroimagery_folder(self):
-        '''
-        # gérer ici le type de dossier à importer
-        current_item_index = self.comboBoxImagerie.currentIndex()
-        if current_item_index == 0:
-            return 0
-        selected_type = self.comboBoxImagerie.itemText(current_item_index)
-        modality = str(selected_type.split('_')[0])
-        session = str(selected_type.split('_')[-1])
-        if modality == "dwi":
-            modalite_class = "Dwi"
-        else:
-            modalite_class = "Anat"
-        imagery_folder = QtGui.QFileDialog.getExistingDirectory(None, "Choisir le dossier d'imagerie",
-                                                                self.last_path)
-        self.last_path = imagery_folder
-        if imagery_folder == "":
-            self.comboBoxImagerie.setCurrentIndex(0)
-            return 0
-        folder_list = [str(imagery_folder)]
-        files_status = self.return_error_if_accent_in_name(folder_list)
-        if files_status == 0:
-            self.comboBoxImplantation.setCurrentIndex(0)
-            return
-        '''
-        keys_to_avoid = ["keys", "IeegGlobalSidecars", "Ieeg", "Meg", "Eeg", "Subject"]
-        modality_class_list = [key for key in self.requirements['Requirements'].keys()
-                               if key not in keys_to_avoid]
-        [ses_list, modality_list, acq_list, task_list, run_list] = \
-            self.define_bids_needs_for_import(modality_class_list)
-
-        neuroimagery_gui = ModalityGui(ses_list, modality_list, acq_list, task_list, run_list)
-        res = neuroimagery_gui.exec_()
-        if res == 0:
-            return 0
-        imagery_folder = QtWidgets.QFileDialog.getExistingDirectory(None, "Choisir le dossier d'imagerie",
-                                                                self.last_path)
-        # Sauvegarde dans le patient des différentes chemin des fichiers :
-        modality_idx = [idx for idx in range(0, len(neuroimagery_gui.combobox_list))
-                        if neuroimagery_gui.combobox_list[idx].objectName() == "modality"]
-        if (modality_idx.__len__() == 1) and modality_idx:
-            modality = str(neuroimagery_gui.combobox_list[modality_idx[0]].currentText())
-            if modality == "Dwi":
-                modalite_class = "Dwi"
-            else:
-                modalite_class = "Anat"
-        else:
-            modality = ""
-        session_idx = [idx for idx in range(0, len(neuroimagery_gui.combobox_list))
-                       if neuroimagery_gui.combobox_list[idx].objectName() == "session"]
-        if session_idx:
-            session = str(neuroimagery_gui.combobox_list[session_idx[0]].currentText())
-        else:
-            session = ""
-        acq_idx = [idx for idx in range(0, len(neuroimagery_gui.combobox_list))
-                   if neuroimagery_gui.combobox_list[idx].objectName() == "acq"]
-        if acq_idx:
-            acq = str(neuroimagery_gui.combobox_list[acq_idx[0]].objectName())
-        else:
-            acq = ''
-        task_idx = [idx for idx in range(0, len(neuroimagery_gui.combobox_list))
-                   if neuroimagery_gui.combobox_list[idx].objectName() == "task"]
-        if task_idx:
-            task = str(neuroimagery_gui.combobox_list[task_idx[0]].objectName())
-        else:
-            task = ''
-        # !!! IL FAUDRAIT LIRE ICI CE QUIL Y A DANS LE FICHIER
-        cur_type_nb = self.sidecar_parser(self.Subject, modalite_class, "modality", modality)
-        self.Subject[modalite_class] = eval("ins_bids_class." + modalite_class + "()")
-        self.Subject[modalite_class][-1].update({'sub': self.Subject['sub'], 'ses': session, 'acq': acq,
-                                                 'modality': modality, 'fileLoc': str(imagery_folder)})
-        suj = self.Subject
-        self.mapping_subject2list(suj)
-        QtWidgets.qApp.processEvents()
-
-    def import_ieeg_files(self):
-        key = 'Ieeg'
-        modality_class_list = [key]
-        [ses_list, modality_list, acq_list, task_list, run_list] = \
-            self.define_bids_needs_for_import(modality_class_list)
-        ieeg_gui = ModalityGui(ses_list, modality_list, acq_list, task_list, run_list)
-        res = ieeg_gui.exec_()
-        if res == 0:
-            return 0
-        files_type_allowed = "(*.trc *.eeg *.vhdr *.vmrk *.dat)"
-        seeg_filename = QtWidgets.QFileDialog.getOpenFileNames(None, "Select one or more seeg files",
-                                                           self.last_path, files_type_allowed)
-        if not seeg_filename:
-            return
-        self.last_path = os.path.dirname(str(seeg_filename[0]))
-        nb_file = seeg_filename.count()
-        if nb_file == 0:
-            return
-        file_list = [str(seeg_filename[i]) for i in range(0, nb_file)]
-        files_status = self.return_error_if_accent_in_name(file_list)
-        if files_status == 0:
-            return
-        # Sauvegarde dans le patient des différentes chemin des fichiers :
-        modality_idx = [idx for idx in range(0, len(ieeg_gui.combobox_list))
-                        if ieeg_gui.combobox_list[idx].objectName() == "modality"]
-        if (modality_idx.__len__() == 1) and modality_idx:
-            modality = str(ieeg_gui.combobox_list[modality_idx[0]].currentText())
-            modalite_class = modality_class_list[0]
-        else:
-            modality = ""
-        session_idx = [idx for idx in range(0, len(ieeg_gui.combobox_list))
-                       if ieeg_gui.combobox_list[idx].objectName() == "session"]
-        if session_idx:
-            session = str(ieeg_gui.combobox_list[session_idx[0]].currentText())
-        else:
-            session = ""
-        acq_idx = [idx for idx in range(0, len(ieeg_gui.combobox_list))
-                   if ieeg_gui.combobox_list[idx].objectName() == "acq"]
-        if acq_idx:
-            acq = str(ieeg_gui.combobox_list[acq_idx[0]].currentText())
-        else:
-            acq = ''
-        task_idx = [idx for idx in range(0, len(ieeg_gui.combobox_list))
-                    if ieeg_gui.combobox_list[idx].objectName() == "task"]
-        if task_idx:
-            task = str(ieeg_gui.combobox_list[task_idx[0]].currentText())
-        else:
-            task = ''
-        # Sauvegarde dans le patient des différentes chemin des fichiers :
-        for i in range(nb_file):
-            filename, file_ext = os.path.splitext(file_list[i])
-            if file_ext == ".dat" or file_ext == ".vmrk" or (
-                    file_ext == ".eeg" and os.path.isfile(filename + '.vhdr')):
-                continue
-            ## DEMANDER ICI LE RUN !!! ==================================================================
-            # !!! IL FAUDRAIT LIRE ICI EC QUIL Y A DANS LE FICHIER
-            cur_type_nb = self.sidecar_parser(self.Subject, modalite_class, "modality", modality)
-            self.Subject[modalite_class] = eval("ins_bids_class." + modalite_class + "()")
-            self.Subject[modalite_class][-1].update({'sub': self.Subject['sub'], 'ses': session, 'acq': acq,
-                                                 'modality': modality, 'task': task, 'fileLoc': file_list[i]})
-            suj = self.Subject
-            self.mapping_subject2list(suj)
-            QtWidgets.qApp.processEvents()
-
-    def import_meg_files(self):
-        print("toto")
-
-    def import_eeg_files(self):
-        print("toto")
-
     def find_position_on_screen(self, widget):
         ancetre = widget
         widget_position = QtCore.QPoint()
@@ -1163,101 +984,6 @@ class GenericUploader(QtWidgets.QMainWindow, Ui_MainWindow):
             ancetre = ancetre.parent()
         pos_on_screen = widget_position + self.pos()
         return pos_on_screen
-
-    def import_seeg_file(self):
-        # gérer ici le type de fichier à importer
-        current_item_index = self.comboBoxSeeg.currentIndex()
-        files_type_allowed = "(*.trc *.eeg *.vhdr *.vmrk *.dat)"
-        if current_item_index == 0:
-            return 0
-        # elif current_item_index == 1:
-        #     files_type = "seizure"
-        #     acquisition = "type"
-        #     widget_pos_on_screen = self.find_position_on_screen(self.comboBoxSeeg)
-        #     seeg_type_dialog = DialogSeizureType(widget_pos_on_screen)
-        #     seeg_type_dialog_status = seeg_type_dialog.exec_()
-        #     if seeg_type_dialog_status == 0:
-        #         return 0
-        #     seizure_type = seeg_type_dialog.seizure_type
-        # elif current_item_index == 2:
-        #     files_type = "rest"
-        #     seizure_type = ""
-        #     acquisition = ""
-        # elif current_item_index == 3:
-        #     files_type = "sleep"
-        #     seizure_type = ""
-        #     acquisition = ""
-        else:
-            files_type = str(self.comboBoxSeeg.currentText()).split('_')
-            files_type = files_type[1]
-            if files_type == "seizure":
-                acquisition = "type"
-                widget_pos_on_screen = self.find_position_on_screen(self.comboBoxSeeg)
-                seeg_type_dialog = DialogSeizureType(widget_pos_on_screen)
-                seeg_type_dialog_status = seeg_type_dialog.exec_()
-                if seeg_type_dialog_status == 0:
-                    return 0
-                seizure_type = seeg_type_dialog.seizure_type
-            else:
-                seizure_type = ""
-                acquisition = ""
-        seeg_filename = QtWidgets.QFileDialog.getOpenFileNames(None,
-                                                           "Selectionner un ou plusieurs fichiers SEEG",
-                                                           self.last_path,
-                                                           files_type_allowed)
-        if not seeg_filename:
-            self.comboBoxSeeg.setCurrentIndex(0)
-            return
-        self.last_path = os.path.dirname(str(seeg_filename[0]))
-        nb_file = seeg_filename.count()
-        if nb_file == 0:
-            self.comboBoxSeeg.setCurrentIndex(0)
-            return
-        file_list = [str(seeg_filename[i]) for i in range(0, nb_file)]
-        files_status = self.return_error_if_accent_in_name(file_list)
-        if files_status == 0:
-            self.comboBoxSeeg.setCurrentIndex(0)
-            return
-        # Sauvegarde dans le patient des différentes chemin des fichiers :
-        acq = acquisition + str(seizure_type)
-        for i in range(nb_file):
-            filename, file_ext = os.path.splitext(file_list[i])
-            if file_ext == ".dat" or file_ext == ".vmrk" or (file_ext == ".eeg" and os.path.isfile(filename+'.vhdr')):
-                continue
-            cur_type_nb = self.sidecar_parser(self.Subject, "Ieeg", "task", files_type, acq)
-            self.Subject["Ieeg"] = ins_bids_class.Ieeg()
-            self.Subject['Ieeg'][-1].update({'sub': self.Subject['sub'], 'ses': '01',
-                                                    'acq': acq, 'task': files_type,
-                                                    'fileLoc': file_list[i], 'run': str(cur_type_nb + 1)})
-            suj = self.Subject
-            self.mapping_subject2list(suj)
-            QtWidgets.qApp.processEvents()
-        # remise à 0 du combobox et remplissage de la liste
-        self.comboBoxSeeg.setCurrentIndex(0)
-
-    def import_addi_files(self):
-        addi_files = QtWidgets.QFileDialog.getOpenFileNames(None, "Selectionner le/les fichiers additionels",
-                                                        self.last_path)
-        if not addi_files:
-            return 0
-        self.last_path = os.path.dirname(str(addi_files[0]))
-        suj = self.Subject
-        for files in addi_files:
-            self.addi_files.append(str(files))
-        self.mapping_subject2list(suj)
-        QtWidgets.qApp.processEvents()
-
-    def import_fiche_patient(self):
-        fiche_patient_files = QtWidgets.QFileDialog.getOpenFileNames(None, "Selectionner la/les fiche patient",
-                                                                 self.last_path)
-        if not fiche_patient_files:
-            return 0
-        self.last_path = os.path.dirname(str(fiche_patient_files[0]))
-        suj = self.Subject
-        for files in fiche_patient_files:
-            self.fiche_patient.append(str(files))
-        self.mapping_subject2list(suj)
-        QtWidgets.qApp.processEvents()
 
     def raz_gui(self):
         self.TextPrenom.setPlainText("")
@@ -1357,7 +1083,7 @@ class GenericUploader(QtWidgets.QMainWindow, Ui_MainWindow):
                 else:
                     self.listWidget.item(action_number).setForeground(QtGui.QColor("green"))
                     self.maplist[action_number]["curr_state"] = "valid"
-                return self.maplist[action_number]["curr_state"]
+                #return self.maplist[action_number]["curr_state"]
                 birthdate = self.birth_date_str[0:2] + self.birth_date_str[3:5] + self.birth_date_str[6:10]
                 if nom.lower().rstrip('\x00') != str(self.TextName.toPlainText()).lower() or prenom.lower().rstrip(
                         '\x00') != str(self.TextPrenom.toPlainText()).lower() or date.lower() != birthdate:
@@ -1491,33 +1217,10 @@ class GenericUploader(QtWidgets.QMainWindow, Ui_MainWindow):
                         foldername = foldername + item + "_"
                     if foldername:
                         foldername = foldername[0:-1]
-                    # if modality:  % pour nouvel uploader 4 boutons
-                    # if acq:
-                    #     ## faire attention si 2 sélections de pas avoir le meme nom
-                    #     if os.path.isdir(os.path.join(temp_path, modality + acq)) is False:
-                    #         dest_name = modality + acq
-                    #         os.mkdir(os.path.join(temp_path, dest_name))
-                    #     else :
-                    #         cur_nb = len([line for line in os.listdir(temp_path) if line.startswith(acq)])
-                    #         dest_name = modality + acq + str(cur_nb)
-                    #         os.mkdir(os.path.join(temp_path, dest_name))
-                    #     dest_filename = os.path.join(temp_path, dest_name)
-                    #     dest4data2import = dest_name
-                    # else:
-                    #     os.mkdir(os.path.join(temp_path, filename))
-                    #     dest_filename = os.path.join(temp_path, filename)
-                    #     dest4data2import = filename
                     dest_filename = os.path.join(temp_path, foldername)
                     dest4data2import = foldername
                     if os.path.isdir(dest_filename) is False:
                         os.mkdir(dest_filename)
-                #elif classe == "Dwi":
-                #    acq = sujet[item["Modality"]][item["Index"]]["acq"]
-                #    if os.path.isdir(os.path.join(temp_path, acq)) is False:
-                #        os.mkdir(os.path.join(temp_path, acq))
-                #    dest_filename = os.path.join(temp_path, acq)
-                #    dest4data2import = acq
-                # elif classe in ["Ieeg", "Meg", "Eeg"]:
                 elif isinstance(tmp_modality, ins_bids_class.Electrophy) or os.path.isfile(src_path):
                     dest_filename = os.path.join(temp_path, filename + file_extension)
                     dest4data2import = filename + file_extension
@@ -1529,20 +1232,6 @@ class GenericUploader(QtWidgets.QMainWindow, Ui_MainWindow):
                 new_filename = filename
                 dest_filename = os.path.join(temp_path, new_filename + file_extension)
                 dest4data2import = new_filename + file_extension
-            # else:
-            #     if "Addi_file_path" in item:
-            #         # dest_filename = os.path.join(temp_path, filename + file_extension)
-            #         cur_nb = len([line for line in os.listdir(temp_path) if line.startswith("additional_file")])
-            #         dest_name = "additional_file" + str(cur_nb)
-            #         dest_filename = os.path.join(temp_path, dest_name + file_extension)
-            #         dest4data2import = filename + file_extension
-            #     elif "fiche_patient" in item:
-            #         cur_nb = len([line for line in os.listdir(temp_path) if line.startswith("fiche_patient")])
-            #         dest_name = "fiche_patient" + str(cur_nb)
-            #         dest_filename = os.path.join(temp_path, dest_name + file_extension)
-            #         dest4data2import = dest_name + file_extension
-            #     # dest_filename = os.path.join(temp_path, filename + file_extension)
-            #     # dest4data2import = filename + file_extension
             return dest_filename, dest4data2import
 
         def anonymize(classe, dest_filename, sub_id):
@@ -1552,6 +1241,13 @@ class GenericUploader(QtWidgets.QMainWindow, Ui_MainWindow):
                     file_extension = file_extension.lower()
                     if file_extension == ".trc":
                         anonymize_micromed(dest_filename)
+                    elif file_extension == ".edf":
+                        anonymize_edf(dest_filename)
+                    else:
+                        QtWidgets.qApp.processEvents()
+                        qmesbox = QtWidgets.QMessageBox(self)
+                        qmesbox.setText("Anonymization cannot be applied on the file format " + file_extension + " because the file doesn't contains patient information.")
+                        qmesbox.exec_()
                 except Exception as e:
                     QtWidgets.qApp.processEvents()
                     qmesbox = QtWidgets.QMessageBox(self)
@@ -1716,23 +1412,6 @@ class GenericUploader(QtWidgets.QMainWindow, Ui_MainWindow):
             self.pushButtonSEEG.setEnabled(True)
         else:
             self.pushButtonSEEG.setDisabled(True)
-
-    # def push_raz_patient(self):
-    #     self.TextName.setPlainText("")
-    #     self.TextPrenom.setPlainText("")
-    #     self.TextID.setPlainText("")
-    #     self.protocole1_name.setPlainText("")
-    #     self.radioButtonM.setAutoExclusive(False)
-    #     self.radioButtonF.setAutoExclusive(False)
-    #     self.radioButtonF.setChecked(False)
-    #     self.radioButtonM.setChecked(False)
-    #     self.radioButtonM.setAutoExclusive(True)
-    #     self.radioButtonF.setAutoExclusive(True)
-    #     self.groupBox.setEnabled(True)
-    #     self.groupBox_2.setEnabled(True)
-    #     self.TextName.setEnabled(True)
-    #     self.TextPrenom.setEnabled(True)
-    #     self.groupBox_3.setDisabled(True)
 
     def disable_gui(self):
 #         self.listElectrodeTypes.setDisabled(True)
