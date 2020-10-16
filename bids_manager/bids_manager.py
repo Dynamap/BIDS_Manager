@@ -1865,6 +1865,10 @@ class BidsBrickDialog(FormDialog):
         if key == 'Derivatives':
             input_dict = self.main_brick[key][0]['Pipeline'][curr_idx]
             to_display = input_dict['name']
+            if to_display in ['log', 'parsing']:
+                messagebox.showwarning('Warning !!',
+                                       to_display + ' folder cannot be deleted.')
+                return
         else:
             input_dict = self.main_brick[key][curr_idx]
             to_display = input_dict['sub']
