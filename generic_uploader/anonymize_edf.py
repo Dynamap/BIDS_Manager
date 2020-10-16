@@ -53,36 +53,38 @@ def get_patient_info(file):
                 patBirthdate = elt
             elif len(elt) > 1:
                 patName += '-' + elt
+                patBirthdate = ''
     patBirthdate = patBirthdate.split('-')
     for val in patBirthdate:
-        if val.isnumeric() and len(val) == 2:
-            day = val
-        elif val.isnumeric() and len(val) == 4:
-            year = val
-        elif val.lower().startswith('jan'):
-            month = '01'
-        elif val.lower().startswith('feb') or val.lower().startswith('fev'):
-            month = '02'
-        elif val.lower().startswith('mar'):
-            month = '03'
-        elif val.lower().startswith('apr') or val.lower().startswith('avr'):
-            month = '04'
-        elif val.lower().startswith('may') or val.lower().startswith('mai'):
-            month = '05'
-        elif val.lower().startswith('jun') or val.lower().startswith('juin'):
-            month = '06'
-        elif val.lower().startswith('jul') or val.lower().startswith('juil'):
-            month = '07'
-        elif val.lower().startswith('aug') or val.lower().startswith('aou'):
-            month = '08'
-        elif val.lower().startswith('sep'):
-            month = '09'
-        elif val.lower().startswith('oct'):
-            month = '10'
-        elif val.lower().startswith('nov'):
-            month = '11'
-        elif val.lower().startswith('dec'):
-            month = '12'
+        if val:
+            if val.isnumeric() and len(val) == 2:
+                day = val
+            elif val.isnumeric() and len(val) == 4:
+                year = val
+            elif val.lower().startswith('jan'):
+                month = '01'
+            elif val.lower().startswith('feb') or val.lower().startswith('fev'):
+                month = '02'
+            elif val.lower().startswith('mar'):
+                month = '03'
+            elif val.lower().startswith('apr') or val.lower().startswith('avr'):
+                month = '04'
+            elif val.lower().startswith('may') or val.lower().startswith('mai'):
+                month = '05'
+            elif val.lower().startswith('jun') or val.lower().startswith('juin'):
+                month = '06'
+            elif val.lower().startswith('jul') or val.lower().startswith('juil'):
+                month = '07'
+            elif val.lower().startswith('aug') or val.lower().startswith('aou'):
+                month = '08'
+            elif val.lower().startswith('sep'):
+                month = '09'
+            elif val.lower().startswith('oct'):
+                month = '10'
+            elif val.lower().startswith('nov'):
+                month = '11'
+            elif val.lower().startswith('dec'):
+                month = '12'
     try:
         birthday = day+month+year
     except:

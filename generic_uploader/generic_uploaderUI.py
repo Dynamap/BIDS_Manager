@@ -52,7 +52,7 @@ class Ui_MainWindow(object):
         #Aude: Determine the size of the monitor and do everything according to it
         if sizeObject.width() > 800 and sizeObject.width() < 2000:
             mainwidth = round((sizeObject.width()*3)/4)
-        elif  sizeObject.width() > 2000:
+        elif sizeObject.width() > 2000:
             mainwidth = round((sizeObject.width() * 2) / 4)
         else:
             mainwidth = sizeObject.width()

@@ -1399,7 +1399,7 @@ class GenericUploader(QtWidgets.QMainWindow, Ui_MainWindow):
             self.pushButtonSEEG.setDisabled(True)
 
     def disable_gui(self):
-#         self.listElectrodeTypes.setDisabled(True)
+        # self.listElectrodeTypes.setDisabled(True)
         # self.comboBoxImplantation.setDisabled(True)
         # self.comboBoxImagerie.setDisabled(True)
         # self.comboBoxSeeg.setDisabled(True)
