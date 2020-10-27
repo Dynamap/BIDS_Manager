@@ -873,7 +873,7 @@ class BidsBrick(dict):
 
         if list_filename is None:
             list_filename = [filename + ext for ext in conv_ext]
-        if not all(os.path.exists(os.path.join(Data2Import.dirname, file)) for file in list_filename):
+        if not os.path.exists(os.path.join(Data2Import.dirname, list_filename[0])):#if not all(os.path.exists(os.path.join(Data2Import.dirname, file)) for file in list_filename):
             str_issue = 'file: ' + str(filename) + ' does not exist after conversion. Please verify the ' + \
                         ' converter and the original file (' + os.path.join(Data2Import.dirname, self['fileLoc']) + ')'
             raise FileNotFoundError(str_issue)
