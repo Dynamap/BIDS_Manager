@@ -886,7 +886,7 @@ class BidsBrick(dict):
 
         if list_filename is None:
             list_filename = [filename + ext for ext in conv_ext]
-        if not all(os.path.exists(os.path.join(Data2Import.dirname, file)) for file in list_filename):
+        if not os.path.exists(os.path.join(Data2Import.dirname, list_filename[0])):#if not all(os.path.exists(os.path.join(Data2Import.dirname, file)) for file in list_filename):
             str_issue = 'file: ' + str(filename) + ' does not exist after conversion. Please verify the ' + \
                         ' converter and the original file (' + os.path.join(Data2Import.dirname, self['fileLoc']) + ')'
             raise FileNotFoundError(str_issue)
@@ -3601,7 +3601,8 @@ class BidsDataset(MetaBrick):
                     self['Subject'].pop(self.curr_subject['index'])
                     self.save_as_json()
                     self.write_log('Subject ' + element2remove['sub'] + ' has been removed from Bids dataset ' +
-                               self['DatasetDescJSON']['Name'] + ' raw folder.')
+                                   self['DatasetDescJSON']['Name'] + ' raw folder.')
+                    self.is_subject_present(element2remove['sub'])
             else:
                 if isinstance(self, Pipeline):
                     pip = self

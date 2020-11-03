@@ -3,7 +3,7 @@ Package to collect, organise and manage neuroscience data in Brain Imaging Data 
 
 
 ## Version
-BIDS Manager v0.2.6
+BIDS Manager v0.2.7
 
 This version of BIDS Manager uses a version of BIDS Uploader which does not yet handle data transfer via SFTP, the SFTP transfer will me publicly available soon.
 

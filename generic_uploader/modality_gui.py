@@ -38,9 +38,12 @@ class ModalityGui(QtWidgets.QDialog):
         self.setWindowTitle("Modality GUI")
         self.setModal(True)
         self.flag_emptyroom =False
-        screen_geom = self.screen().geometry()
-        screen_width = screen_geom.width()
-        screen_height = screen_geom.height()
+        try:
+            screen_geom = self.screen().geometry()
+            screen_width = screen_geom.width()
+            screen_height = screen_geom.height()
+        except:
+            screen_width = 1920
         sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
         '''elements = [element for element in ["session", "modality", "acquisition", "task", "run", "space"]
                     if eval(element)]'''

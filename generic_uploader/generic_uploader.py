@@ -1456,7 +1456,7 @@ class DialogSeizureType(QtWidgets.QDialog):
             self.accept()
 
 
-def call_generic_uplader(bids_path):
+def call_generic_uploader(bids_path):
     # print(sys.argv)
     # print(len(sys.argv))
     QtCore.pyqtRemoveInputHook()

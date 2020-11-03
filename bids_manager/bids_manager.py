@@ -37,7 +37,7 @@ from future import standard_library
 from bids_manager import ins_bids_class as bids
 import os
 import platform
-from generic_uploader.generic_uploader import call_generic_uplader
+from generic_uploader.generic_uploader import call_generic_uploader
 from tkinter import ttk, Tk, Menu, messagebox, filedialog, Frame, Listbox, scrolledtext, Toplevel, \
     Label, Button, Entry, StringVar, IntVar, DISABLED, NORMAL, END, W, N, E, BOTH, X, Y, RIGHT, LEFT,\
     TOP, BOTTOM, BROWSE, MULTIPLE, EXTENDED, ACTIVE, RIDGE, Scrollbar, CENTER, OptionMenu, Checkbutton, Radiobutton, GROOVE, \
@@ -54,7 +54,7 @@ class BidsManager(Frame, object):  # !!!!!!!!!! object is used to make the class
     # (https://stackoverflow.com/questions/18171328/python-2-7-super-error) While it is true that Tkinter uses
     # old-style classes, this limitation can be overcome by additionally deriving the subclass Application from object
     # (using Python multiple inheritance) !!!!!!!!!
-    version = '0.2.6'
+    version = '0.2.7'
     bids_startfile = ''
     import_startfile = ''
 
@@ -181,8 +181,8 @@ class BidsManager(Frame, object):  # !!!!!!!!!! object is used to make the class
         if flag:
             self.make_idle('Appling actions')
             self.curr_bids.apply_actions()
-            if self.upload_dir:
-                self.curr_data2import = bids.Data2Import(self.upload_dir)
+            # if self.upload_dir:
+            #     self.curr_data2import = bids.Data2Import(self.upload_dir)
             self.update_text(self.curr_bids.curr_log)
             self.pack_element(self.main_frame['text'])
             self.make_available()
@@ -190,9 +190,9 @@ class BidsManager(Frame, object):  # !!!!!!!!!! object is used to make the class
             flag_import = False
             upload_dir = [os.path.normpath(elt['path']) for elt in self.curr_bids.issues['UpldFldrIssue'] + self.curr_bids.issues['ImportIssue']]
             upload_dir = list(set(upload_dir))
-            if len(upload_dir) > 1 or (len(upload_dir) == 1 and os.path.normpath(self.upload_dir) != upload_dir[0]):
-                if self.upload_dir is not None and self.upload_dir not in upload_dir:
-                    upload_dir.append(self.upload_dir)
+            if len(upload_dir) > 1 or (self.upload_dir is not None and len(upload_dir) == 1 and os.path.normpath(self.upload_dir) != upload_dir[0]):
+                if self.upload_dir is not None and os.path.normpath(self.upload_dir) not in upload_dir:
+                    upload_dir.append(os.path.normpath(self.upload_dir))
                 self.upload_dir = None
                 small_win = SmallDialog(self, upload_dir, 'Do you want to import data?', 'Select the upload directory:')
                 if small_win.results:
@@ -205,6 +205,13 @@ class BidsManager(Frame, object):  # !!!!!!!!!! object is used to make the class
                 self.upload_dir = upload_dir[0]
             if flag_import:
                 self.curr_data2import = bids.Data2Import(self.upload_dir)
+                if self.curr_data2import.is_empty():
+                    log_import = 10 * '=' + '\n' + 'There is no file to import in ' + self.upload_dir + \
+                                ' (you should manually remove this folder).\n'
+                    self.upload_dir = None
+                    self.curr_data2import = None
+                    self.update_text(log_import, delete_flag=False)
+                    return
                 self.import_data()
 
     def delete_actions(self):
@@ -235,7 +242,8 @@ class BidsManager(Frame, object):  # !!!!!!!!!! object is used to make the class
                                                        self.curr_data2import.classname() + '.\nAre you sure?'):
             self.curr_data2import.save_as_json()
             if self.curr_data2import.is_empty():
-                self.update_text('There is no file to import in ' + self.upload_dir)
+                self.update_text(10 * '=' + '\n' + 'There is no file to import in ' + self.upload_dir +
+                                 ' (you should manually remove this folder).\n')
                 self.upload_dir = None
                 self.curr_data2import = None
             else:
@@ -344,7 +352,6 @@ class BidsManager(Frame, object):  # !!!!!!!!!! object is used to make the class
 
             return error_str
 
-
         def check_access():
             if os.path.isfile(self.curr_bids.access.filename):
                 acss = bids.Access()
@@ -425,6 +432,7 @@ class BidsManager(Frame, object):  # !!!!!!!!!! object is used to make the class
 
     def explore_bids_dataset(self):
         self.pack_element(self.main_frame['text'])
+        bids.BidsDataset._assign_bids_dir(self.curr_bids.dirname)
         BidsBrickDialog(self, self.curr_bids)
         self.curr_bids.save_as_json()
 
@@ -441,7 +449,8 @@ class BidsManager(Frame, object):  # !!!!!!!!!! object is used to make the class
                 req_path = os.path.join(self.curr_bids.dirname, 'code', 'requirements.json')
                 self.curr_data2import = bids.Data2Import(self.upload_dir, req_path)
                 if self.curr_data2import.is_empty():
-                    self.update_text('There is no file to import in ' + self.upload_dir)
+                    self.update_text(10 * '=' + '\n' + 'There is no file to import in ' + self.upload_dir +
+                                     ' (you should manually remove this folder).\n')
                     self.upload_dir = None
                     self.curr_data2import = None
                 else:
@@ -621,7 +630,7 @@ class BidsManager(Frame, object):  # !!!!!!!!!! object is used to make the class
 
     def solve_issues(self, issue_key):
 
-        def what2domenu(iss_key, dlb_lst, line_map, event, deriv_issue=None):
+        def what2domenu(iss_key, dlb_lst, line_map, event, source_issue=False, deriv_issue=None):
 
             if not dlb_lst.elements['list1'].curselection():
                 return
@@ -665,12 +674,17 @@ class BidsManager(Frame, object):  # !!!!!!!!!! object is used to make the class
                          file that will be imported"""
                         pop_menu.add_command(label='Open file',
                                              command=lambda: self.open_file(issue_key, curr_idx, line_map[curr_idx]))
-                        pop_menu.add_command(label='Change modality attributes',
-                                             command=lambda: self.modify_attributes(issue_key, curr_idx,
-                                                                                    line_map[curr_idx], in_bids=False, deriv_folder=deriv_issue))
+                        if not source_issue:
+                            pop_menu.add_command(label='Change modality attributes',
+                                                 command=lambda: self.modify_attributes(issue_key, curr_idx,
+                                                                                        line_map[curr_idx],
+                                                                                        in_bids=False,
+                                                                                        deriv_folder=deriv_issue))
                         if iss_key == 'ImportIssue':
-                            pop_menu.add_command(label='Remove file in BIDS',
-                                                 command=lambda: self.remove_file(curr_idx, line_map[curr_idx], deriv_folder=deriv_issue))
+                            if not source_issue:
+                                pop_menu.add_command(label='Remove file in BIDS',
+                                                     command=lambda: self.remove_file(curr_idx, line_map[curr_idx],
+                                                                                      deriv_folder=deriv_issue))
                         else:
                             idx = line_map[curr_idx]['index']
                             curr_dict = self.curr_bids.issues['UpldFldrIssue'][idx]
@@ -682,12 +696,13 @@ class BidsManager(Frame, object):  # !!!!!!!!!! object is used to make the class
                                                      command=lambda: self.mark_as_verified(curr_idx, line_map[curr_idx],
                                                                                            state_str))
 
-                    pop_menu.add_command(label='Do not import',
-                                         command=lambda: self.do_not_import(issue_key, curr_idx, line_map[curr_idx], deriv_folder=deriv_issue))
-                    # in case you wrongly chose a folder
-                    pop_menu.add_command(label='Remove issue',
-                                         command=lambda: self.remove_issue(issue_key, curr_idx,
-                                                                           line_map[curr_idx]))
+                        pop_menu.add_command(label='Do not import',
+                                             command=lambda: self.do_not_import(issue_key, curr_idx, line_map[curr_idx],
+                                                                                deriv_folder=deriv_issue))
+            # in case you wrongly chose a folder
+            pop_menu.add_command(label='Remove issue',
+                                 command=lambda: self.remove_issue(issue_key, curr_idx,
+                                                                   line_map[curr_idx]))
 
             pop_menu.add_command(label='Read or add comment',
                                  command=lambda: self.get_entry(issue_key, curr_idx, line_map[curr_idx]))
@@ -700,6 +715,7 @@ class BidsManager(Frame, object):  # !!!!!!!!!! object is used to make the class
         self.pack_element(dlb_list)
 
         deriv_issue = None
+        source_issue = False
         issue_dict = self.curr_bids.issues[issue_key]
         issue_list2write = []
         action_list2write = []
@@ -739,6 +755,8 @@ class BidsManager(Frame, object):  # !!!!!!!!!! object is used to make the class
                     issue_list2write.append(issue['description'])
                     if issue['description'].startswith('Derivatives folder'):
                         deriv_issue = issue['description'].split(' ')[2]
+                    elif 'source' in issue['description']:
+                        source_issue = True
                 else:
                     issue_list2write.append('sub-' + issue['sub'] + ' : ' + os.path.basename(issue['path']) + ' : ' + os.path.basename(issue['fileLoc']) + ' file is ' + issue['state'])
                     #issue_list2write.append('File: ' + os.path.basename(issue['fileLoc']) + ' is ' + issue['state'])
@@ -766,8 +784,8 @@ class BidsManager(Frame, object):  # !!!!!!!!!! object is used to make the class
         self.populate_list(dlb_list.elements['list2'], action_list2write)
         self.banner_label.set(self.banner_label._default + '\nSelect issue from the ' + label_str + ' list')
         dlb_list.elements['list1'].bind('<Double-Button-1>',
-                                        lambda event: what2domenu(issue_key, dlb_list, line_mapping, event, deriv_issue))
-        dlb_list.elements['list1'].bind('<Return>', lambda event: what2domenu(issue_key, dlb_list, line_mapping, event, deriv_issue))
+                                        lambda event: what2domenu(issue_key, dlb_list, line_mapping, event, source_issue, deriv_issue))
+        dlb_list.elements['list1'].bind('<Return>', lambda event: what2domenu(issue_key, dlb_list, line_mapping, event, source_issue, deriv_issue))
 
     def import_data(self):
         self.pack_element(self.main_frame['text'])
@@ -830,10 +848,10 @@ class BidsManager(Frame, object):  # !!!!!!!!!! object is used to make the class
             else:
                 messagebox.showinfo('BIDS Uploader', 'BIDS Uploader cannot be ran')
                 return
-        #Run the BIDS Uploader
+        # Run BIDS Uploader
         self.make_idle('BIDS Uploader is running')
         try:
-            call_generic_uplader(self.curr_bids)
+            call_generic_uploader(self.curr_bids)
             self.update()
         except:
             self.update_text('BIDS uploader crashed')
@@ -842,44 +860,54 @@ class BidsManager(Frame, object):  # !!!!!!!!!! object is used to make the class
         dirname = os.path.dirname(self.curr_bids.dirname)
         self.upload_dir = os.path.join(dirname, 'TempFolder4Upload')
         if not os.path.exists(self.upload_dir):
-            self.update_text('The importation has been cancel because there is no data to import.')
+            self.update_text('The importation has been cancel because the output directory of BIDS Uploader doesn"t exist.')
             self.make_available()
             return
         self.make_idle('Data are ready to be imported.')
         if not os.listdir(self.upload_dir):
-            self.update_text('There is nothing to import.')
+            log_import = 'There is no upload directory in the output directory of BIDS Uploader named "TempFolder4Upload".\n'
         elif os.path.isfile(os.path.join(self.upload_dir, bids.Data2Import.filename)):
-            is_ready = self.verify_data2import(self.upload_dir)
+            is_ready, log_error = self.verify_data2import(self.upload_dir)
             if is_ready:
                 self.curr_bids.import_data(self.curr_data2import)
                 self.curr_data2import = None
+            log_import = log_error + '\n'
         else:
-            data_imported = 0
+            log_import = ''
             with os.scandir(self.upload_dir) as it:
                 for entry in it:
                     if entry.is_dir() and self.curr_bids['DatasetDescJSON']['Name'] in entry.name:
                         if os.path.isfile(os.path.join(entry.path, bids.Data2Import.filename)):
-                            is_ready = self.verify_data2import(entry.path)
+                            is_ready, log_error = self.verify_data2import(entry.path)
                             if is_ready:
                                 self.curr_bids.import_data(self.curr_data2import)
                                 self.curr_data2import = None
-                                data_imported += 1
-            if data_imported == 0:
-                self.update_text('There is nothing to import.')
+                            log_import += log_error
+        self.update_text(log_import, delete_flag=False)
         self.make_available()
 
     def verify_data2import(self, upload_dir):
+        log_error = ''
         is_ready = False
         req_path = os.path.join(self.curr_bids.dirname, 'code', 'requirements.json')
-        self.curr_data2import = bids.Data2Import(upload_dir, req_path)
-        if self.curr_data2import.is_empty():
-            self.update_text('There is no file to import in ' + upload_dir)
-            self.upload_dir = None
-            self.curr_data2import = None
-        else:
-            self.curr_bids.make_upload_issues(self.curr_data2import, force_verif=True)
-            is_ready = True
-        return is_ready
+        try:
+            self.curr_data2import = bids.Data2Import(upload_dir, req_path)
+            if self.curr_data2import.is_empty():
+                log_error = 10*'=' + '\n' + 'There is no file to import in ' + upload_dir + \
+                            ' (you should manually remove this folder).\n'
+                self.upload_dir = None
+                self.curr_data2import = None
+            elif not self.curr_data2import['DatasetDescJSON']['Name'] == self.curr_bids['DatasetDescJSON']['Name']:
+                #log_error = 'The upload directory {} doesn"t have the same protocol name of your BIDS dataset so it won"t be import.'.format(upload_dir)
+                self.upload_dir = None
+                self.curr_data2import = None
+            else:
+                self.curr_bids.make_upload_issues(self.curr_data2import, force_verif=True)
+                is_ready = True
+        except Exception as err:
+            is_ready = False
+            log_error += 'The upload directory {0} has not been imported because {1}.\n'.format(upload_dir, str(err))
+        return is_ready, log_error
 
     def modify_requirements_file(self):
         if self.curr_bids:
@@ -2777,13 +2805,17 @@ class RequirementsDialog(TemplateDialog):
                 self.attributes("-topmost", True)
         else:
             idx = 1
-            num = 3
-            #self.info_butt_removed.append(idx_button)
-            if idx_val != 0:
-                for i in range(1, idx_val, 1):
-                    if i not in self.info_val_removed:
-                        num += 4
-            idx_button = num - 3
+            # num = -1
+            # #self.info_butt_removed.append(idx_button)
+            # if idx_val != 0:
+            #     for i in range(1, idx_val, 1):
+            #         if i not in self.info_val_removed:
+            #             num += 4
+            # idx_button = num - 3
+            id_in = len([val for val in self.info_val_removed if val < idx_val])
+            if id_in >0:
+                idx_val = idx_val - id_in
+            idx_button = idx_val*4
             while idx < 5:
                 self.info_button[idx_button].grid_forget()
                 del self.info_button[idx_button]
@@ -3463,6 +3495,7 @@ def run_app():
     # root.update()
     # root.deiconify()
     root.mainloop()
+
 
 if __name__ == '__main__':
     run_app()

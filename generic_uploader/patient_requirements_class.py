@@ -34,9 +34,12 @@ class PatientRequirementsClass(QtWidgets.QDialog):
         QtWidgets.QDialog.__init__(self)
         self.setObjectName("Requirements windows")
         self.setWindowTitle("Requirements windows")
-        screen_geom = self.screen().geometry()
-        screen_width = screen_geom.width()
-        screen_height = screen_geom.height()
+        try:
+            screen_geom = self.screen().geometry()
+            screen_width = screen_geom.width()
+            screen_height = screen_geom.height()
+        except AttributeError:
+            screen_width = 1920
         font = QtGui.QFont()
         font.setFamily(_fromUtf8("Segoe UI"))
         font.setPointSize(8)
