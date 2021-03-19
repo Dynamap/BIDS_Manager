@@ -1,0 +1,47 @@
+{
+ "Name": "filter_data",
+ "Path": "D:/Software/software_for_paper_submission/filter_data.exe",
+ "Parameters": {
+  "Mode": [
+   "automatic"
+  ],
+  "Callname": "filter_data",
+  "Input": [
+   {
+    "tag": "input_file",
+    "multiplesubject": false,
+    "modality": [
+     "Ieeg",
+     "Eeg"
+    ],
+    "type": "file"
+   }
+  ],
+  "Output": {
+   "tag": "output_directory",
+   "multiplesubject": false,
+   "directory": true,
+   "type": "dir",
+   "extension": []
+  },
+  "low_frequency": {
+   "default": 1,
+   "unit": ""
+  },
+  "high_frequency": {
+   "default": 45,
+   "unit": ""
+  },
+  "filter_type": {
+   "possible_value": [
+    "bandpassfir",
+    "bandpassiir"
+   ],
+   "multipleselection": false
+  },
+  "filter_order": {
+   "default": 20,
+   "unit": ""
+  }
+ }
+}
