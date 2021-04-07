@@ -35,7 +35,7 @@ This version of BIDS Manager uses a version of BIDS Uploader which does not yet 
 * xlrd
 
 ## Tutorial video
-A tutorial video explaining you how to convert the example dataset is available [HERE](https://youtu.be/HvJjr6WZNQA)
+A tutorial video explaining you how to convert the example dataset and how to launch analysis is available [HERE](https://www.youtube.com/watch?v=oFFJy5q6e3o)
 
 ## Authors
 * Main developper: Nicolas Roehri <nicolas.roehri@etu.univ-amu.fr>
@@ -50,4 +50,5 @@ If you wish to compile these scripts using PyInstaller 4.0 or above, use the com
 ```
 pyinstaller --onefile --icon=bids_manager\\bids_manager.ico --hidden-import PyQt5.sip bids_manager\\bids_manager.py
 ```
-An **example dataset** is available here: https://figshare.com/articles/Example_Dataset_for_BIDS_Manager/11687064
+An **example dataset** is available here: https://figshare.com/articles/Example_Dataset_for_BIDS_Manager/11687064.
+A  **compiled version** of BIDS Manager-Pipeline for Windows system is available here: https://figshare.com/articles/software/BIDS_Manager-Pipeline/14381624.

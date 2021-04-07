@@ -217,7 +217,7 @@ class DerivativesSetting(object):
 
 
 class DatasetDescPipeline(bids.DatasetDescJSON):
-    keylist = ['Name', 'BIDSVersion', 'PipelineDescription', 'SourceDataset', 'Author', 'Date']
+    keylist = ['Name', 'BIDSVersion', 'PipelineDescription', 'SourceDataset', 'Authors', 'Date']
     filename = 'dataset_description.json'
     bids_version = '1.4.0'
 
@@ -227,7 +227,7 @@ class DatasetDescPipeline(bids.DatasetDescJSON):
             self.read_file(filename)
         else:
             self['PipelineDescription'] = {}
-            self['Author'] = getpass.getuser()
+            self['Authors'] = getpass.getuser()
             self['Date'] = datetime.datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
             if param_vars and subject_list:
                 for key in param_vars:
@@ -592,7 +592,7 @@ class PipelineSetting(dict):
             jsonf['Description'] = 'Results of ' + self['Name'] + ' analysis.'
             jsonf['RawSources'] = input_file
             jsonf['Parameters'] = analyse
-            jsonf['Author'] = getpass.getuser()
+            jsonf['Authors'] = getpass.getuser()
             jsonf['Date'] = datetime.datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
             jsonf.write_file(output_json)
 
@@ -665,10 +665,14 @@ class PipelineSetting(dict):
                           'JsonName']}
         # Voir comment gérer Software version
         file_to_write['JsonName'] = self.jsonfilename
-        author = dataset_desc['Author']
+        author = dataset_desc['Authors']
         name = dataset_desc['Name'].split('-')[0]
         file_to_write['Software'] = name
         if author is None or author == '':
+            author = getpass.getuser()
+        elif isinstance(author, list):
+            author = '-'.join(author)
+        if author == 'n/a':
             author = getpass.getuser()
         date = dataset_desc['Date']
         if date is None or date == '':
