@@ -655,6 +655,26 @@ class BidsBrick(dict):
             self.write_log(str_iss)
             return False
 
+        def get_group_from_elecname(tsv):
+            if not isinstance(tsv, (ChannelsTSV, ElecTSV)):
+                str_issue = 'Input is not of class ChannelsTSV or ElecTSV'
+                BidsDataset.write_log(str_issue)
+                raise TypeError(str_issue)
+
+            if 'group' in tsv.header:
+                idx_elec_name = tsv.header.index('group')
+                groupnm = [line[idx_elec_name] for line in tsv[1:]]
+            else:
+                groupnm = []
+                idx_elec_name = tsv.header.index('name')
+                for line in tsv[1:]:
+                    str_group = [c for c in line[idx_elec_name] if not c.isdigit()]
+                    if str_group:
+                        groupnm.append(''.join(str_group))
+                    else:  # case where the electrode name is a number (EGI)
+                        groupnm.append(line[idx_elec_name])
+            return groupnm
+
         if isinstance(self, BidsDataset) and self.requirements and self.requirements['Requirements']:
             self.write_log(10 * '=' + '\nCheck requirements\n' + 10 * '=')
             key_words = self.requirements.keywords
@@ -714,24 +734,19 @@ class BidsBrick(dict):
                             continue
 
                         elect_tsv = [brick[elec_class_name] for brick in sdcr_list if brick['modality'] == 'electrodes']
-                        elecname = []
+
                         # several electrodes.tsv can be found (e.g. for several space)
-                        for tsv in elect_tsv:
+                        for tsv in elect_tsv:  # how are different implantation handled? 2 SEEG or classical and hd-EEG
                             if not ref_elec:
-                                if 'group' in tsv.header:
-                                    idx_elec_name = tsv.header.index('group')
-                                    elecname = [line[idx_elec_name] for line in tsv[1:]]
-                                else:
-                                    idx_elec_name = tsv.header.index('name')
-                                    for line in tsv[1:]:
-                                        str_group = [c for c in line[idx_elec_name] if not c.isdigit()]
-                                        elecname.append(''.join(str_group))
-                                [ref_elec.append(name) for name in elecname if name not in ref_elec]
-                            else:
+                                groupname = get_group_from_elecname(tsv)
+                                [ref_elec.append(name) for name in groupname if name not in ref_elec]
+                                ref_elec.sort()
+                            else:  #!!!!!!!!!! here there is something wrong when group does not exist.
                                 curr_elec = []
-                                [curr_elec.append(line[idx_elec_name]) for line in tsv[1:]
-                                 if line[idx_elec_name] not in curr_elec]
-                                if not curr_elec.sort() == ref_elec.sort():
+                                groupname = get_group_from_elecname(tsv)
+                                [curr_elec.append(name) for name in groupname if name not in curr_elec]
+                                curr_elec.sort()
+                                if not curr_elec == ref_elec:
                                     ref_elec = []
 
                         if not ref_elec:
@@ -747,12 +762,15 @@ class BidsBrick(dict):
                             curr_type = []
                             """ list all the channels of the modality type end check whether their are in the reference 
                             list of electrodes"""
-                            idx_chan_name = mod[channel_class_name].header.index('group')
+                            elecname = get_group_from_elecname(mod[channel_class_name])
                             idx_chan_type = mod[channel_class_name].header.index('type')
-                            [(curr_elec.append(line[idx_chan_name]), curr_type.append(line[idx_chan_type]))
-                             for line in mod[channel_class_name][1:] if line[idx_chan_name] not in curr_elec and
-                             not line[idx_chan_name] == BidsSidecar.bids_default_unknown and
-                             line[idx_chan_type] in mod.mod_channel_type] #Si trop de value dans mod.channel_type pb
+                            elec_type = [line[idx_chan_type] for line in mod[channel_class_name][1:]]
+                            for nme, typ in zip(elecname, elec_type):
+                                if nme not in curr_elec and not nme == BidsSidecar.bids_default_unknown and\
+                                        typ in mod.mod_channel_type:
+                                    curr_elec.append(nme)
+                                    curr_type.append(typ)
+
                             miss_matching_elec = [{'name': name, 'type': curr_type[cnt]}
                                                   for cnt, name in enumerate(curr_elec) if name not in ref_elec]
                             if miss_matching_elec:

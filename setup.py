@@ -5,7 +5,7 @@ here = path.abspath(path.dirname(__file__))
 
 setup(
     name='bids_manager',
-    version='0.2.7',
+    version='0.2.8',
     zip_safe=False,
     url='https://github.com/Dynamap/BIDS_Manager',
     description='Package to collect, organise and manage neuroscience data in BIDS format',
@@ -17,7 +17,8 @@ setup(
     install_requires=[
         'future',
         'PyQt5',
-        'pydicom'
+        'pydicom',
+        'paramiko',
     ],
     include_package_data=True,
     entry_points={'console_scripts': ['bids_manager=bids_manager:main']},

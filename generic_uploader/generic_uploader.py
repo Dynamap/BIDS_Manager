@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 
-#     BIDS Manager collect, organise and manage data in BIDS format.
+#     BIDS Uploader collect, creates the data2import requires by BIDS Manager
+#     and transfer data if in sFTP mode.
 #     Copyright © 2018-2020 Aix-Marseille University, INSERM, INS
 #
-#     This file is part of BIDS Manager. BIDS uploader collects data and
-#     creates the data2import requires by BIDS Manager.
+#     This file is main file of BIDS Uploader.
 #
 #     BIDS Manager is free software: you can redistribute it and/or modify
 #     it under the terms of the GNU General Public License as published by
@@ -24,10 +24,6 @@
 """
 Created on Mon Mar 19 11:19:56 2018
 """
-
-from PyQt5 import QtGui, QtCore, QtWidgets
-from generic_uploader.generic_uploaderUI import Ui_MainWindow
-from generic_uploader.validationdialog import Ui_Dialog
 import sys
 import os
 import shutil
@@ -35,6 +31,23 @@ import hashlib
 import datetime
 import re
 import unicodedata
+import paramiko
+try:
+    from PyQt5 import QtGui, QtCore, QtWidgets
+except:
+    python_sys = sys.path
+    lib_path = [ch for ch in python_sys if ch.endswith('site-packages')]
+    lib_list = os.listdir(lib_path[0])
+    if any(elt.startswith('PyQt5-') for elt in lib_list) and any(elt.startswith('PyQt5_sip') for elt in lib_list):
+        pyqt_path = [elt for elt in lib_list if elt.startswith('PyQt5-')]
+        sip_path = [elt for elt in lib_list if elt.startswith('PyQt5_sip')]
+        if sip_path and lib_path:
+            for file in os.listdir(os.path.join(lib_path[0], sip_path[0], 'PyQt5')):
+                if file.startswith('sip') and file.endswith('.pyd'):
+                    shutil.copy(os.path.join(lib_path[0], sip_path[0], 'PyQt5', file), os.path.join(lib_path[0], pyqt_path[0], 'PyQt5'))
+                    from PyQt5 import QtGui, QtCore, QtWidgets
+from generic_uploader.generic_uploaderUI import Ui_MainWindow
+from generic_uploader.validationdialog import Ui_Dialog
 from generic_uploader.micromed import anonymize_micromed
 from generic_uploader.read_seeg_images_header import read_headers
 from generic_uploader.anonymizeDicom import anonymize as anonymize_dcm
@@ -44,9 +57,38 @@ from generic_uploader import patient_requirements_class
 from generic_uploader.modality_gui import ModalityGui
 from generic_uploader.import_by_modality import import_by_modality
 from generic_uploader.empty_room_dialog import EmptyRoomImportDialog
+from generic_uploader.data_transfert import data_transfert_sftp
 
 if 0:  # Used to compile, otherwise, it crashes
     pass
+
+
+#Put the fonction outside of the classes to call them in other scripts
+def valide_date(d):
+    try:
+        dd = datetime.datetime.strptime(d, '%d/%m/%Y')
+    except:
+        return False
+    else:
+        if (dd < datetime.datetime(year=1800, month=1, day=1)) or (dd > datetime.datetime.now()):
+            return False
+        else:
+            return dd.strftime('%d%m%Y')
+
+
+def valide_mot(mot):
+    nfkd_form = unicodedata.normalize('NFKD', mot)
+    only_ascii = nfkd_form.encode('ASCII', 'ignore')  # supprime les accents et les diacritiques
+    only_ascii_string = only_ascii.decode('ASCII').upper()  # reconvertit les bytes en string
+    only_az = re.sub('[^A-Z]', '', only_ascii_string)  # supprime tout ce qui n'est pas [A-Z]
+    return only_az
+
+
+def hash_object(obj):
+    clef256 = hashlib.sha256(obj.encode())
+    clef_digest = clef256.hexdigest()
+    clef = clef_digest[0:12]
+    return clef
 
 
 class GenericUploader(QtWidgets.QMainWindow, Ui_MainWindow):
@@ -93,26 +135,6 @@ class GenericUploader(QtWidgets.QMainWindow, Ui_MainWindow):
                 papa.maplist.pop(selected_item)
                 papa.mapping_subject2list(papa.Subject, True)
                 return papa
-            # elif str(papa.listWidget.currentItem().text()).startswith("Addi"):
-            #     index_in_addi = papa.addi_files.index(papa.maplist[selected_item]["Addi_file_path"])
-            #     papa.addi_files.pop(index_in_addi)
-            #     papa.listWidget.takeItem(selected_item)
-            #     if papa.checkBoxProtocole1.isChecked():
-            #         papa.mapping_subject2list(papa.Subject, True)
-            #         return papa
-            #     if papa.checkBoxProtocole2.isChecked():
-            #         papa.mapping_subject2list(papa.SubjectPHRC, True)
-            #     return papa
-            # elif str(papa.listWidget.currentItem().text()).startswith("Fiche"):
-            #     index_in_fiche_patient = papa.fiche_patient.index(papa.maplist[selected_item]["fiche_patient"])
-            #     papa.fiche_patient.pop(index_in_fiche_patient)
-            #     papa.listWidget.takeItem(selected_item)
-            #     if papa.checkBoxProtocole1.isChecked():
-            #         papa.mapping_subject2list(papa.Subject, True)
-            #         return papa
-            #     if papa.checkBoxProtocole2.isChecked():
-            #         papa.mapping_subject2list(papa.SubjectPHRC, True)
-            #     return papa
 
         def modify_id(self, papa):
             papa.listWidget.currentItem().setForeground(QtGui.QColor("black"))
@@ -124,10 +146,6 @@ class GenericUploader(QtWidgets.QMainWindow, Ui_MainWindow):
 #             papa.listElectrodeTypes.setDisabled(True)
             for groupBox in papa.groupBox_list:
                 groupBox.setDisabled(True)
-            '''papa.import_neuroimagery.setDisabled(True)
-            papa.import_ieeg.setDisabled(True)
-            papa.import_eeg.setDisabled(True)
-            papa.import_meg.setDisabled(True)'''
             # papa.pushButtonAddiFiles.setDisabled(True)
             papa.pushButtonValidation.setDisabled(True)
             f = open(papa.log_filename, "r")
@@ -205,76 +223,64 @@ class GenericUploader(QtWidgets.QMainWindow, Ui_MainWindow):
                     else:
                         papa.copy_and_upload()
 
-    def variable_initialization(self):
-        self.dateEdit.setDateTime(QtCore.QDateTime(QtCore.QDate(1753, 9, 14), QtCore.QTime(1, 0, 0)))
-        self.radioButtonM.setToolTip("Please select sex for ID creation")
-        self.radioButtonF.setToolTip("Please select sex for ID creation")
-        # self.groupBox_implantation.listElectrodeTypes.setToolTip("Select electrode manufacturer")
-        # self.comboBoxImplantation.setToolTip("Chosse scheme type")
-        # self.import_neuroimagery.setToolTip("Choose neuroimagery files to import")
-        # self.import_ieeg.setToolTip("Choose ieeg files to import")
-        # self.import_meg.setToolTip("Choose meg files to import")
-        # self.import_eeg.setToolTip("Choose eeg files to import")
-        self.listWidget.setToolTip("Double click to check, modifiy or delete")
-        self.pushButtonValidation.setToolTip(
-            "Compare data and patient info, copy when validated, and anonymisation if checked")
-        self.pushButtonReset.setToolTip("re-initialize the window")
-        self.pushButtonFinish.setToolTip('Close the window and start the importation of the data selected by subject.')
-        init_path = self.init_path
-        self.last_path = init_path
-        self.log_path = os.path.join(self.importation_path, "importer_log")
-        # creation du dossier des logs
-        if not os.path.isdir(self.log_path):
-            os.mkdir(self.log_path)
-        # self.already_uploaded = os.path.join(init_path, "already_uploaded")
-        # creation du dossier des fichiers déja uploades
-        # if not os.path.isdir(self.already_uploaded):
-        #     os.mkdir(self.already_uploaded)
-        # creation du fichier de log
-        curr_time = datetime.datetime.now().strftime('%d%m%Y-%H%M')
-        self.currentTimeStr = curr_time
-        self.log_filename = os.path.join(self.log_path, "importer_log_" + curr_time + ".log")
-        f = open(self.log_filename, "a+")
-        f.close()
-        self.Subject = {}
-
-    def __init__(self, bids_path):
-    # def __init__(self, bids_path=None):
-                    # requirement_name="requirements_new.json"):
-        # print("Generic Uploader is starting")
-        # print(bids_path)
+    def __init__(self, bids_path, bids_manager_mode):
+        # =========== Initialisation if sFTP or not ==========
         QtWidgets.QMainWindow.__init__(self)
-        if isinstance(bids_path, str):
-            if not os.path.exists(bids_path):
-                raise TypeError('The path doesn"t exists.')
-            self.init_path = bids_path
-            self.bids_dataset = ins_bids_class.BidsDataset(bids_path)
-        elif isinstance(bids_path, ins_bids_class.BidsDataset):
-            self.init_path = bids_path.dirname
-            self.bids_dataset = bids_path
+        # BIDS Uploader with BIDS Manager
+        if bids_manager_mode:
+            self.bids_manager_mode = True
+            if isinstance(bids_path, str):
+                if not os.path.exists(bids_path):
+                    raise TypeError('The path doesn"t exists.')
+                self.init_path = bids_path
+                self.bids_dataset = ins_bids_class.BidsDataset(bids_path)
+            elif isinstance(bids_path, ins_bids_class.BidsDataset):
+                self.init_path = bids_path.dirname
+                self.bids_dataset = bids_path
+            else:
+                raise TypeError('The argument should be path or Bids Dataset')
+            self.requirements = self.bids_dataset.requirements
+            self.importation_path = os.path.normpath(os.path.join(self.init_path, ".."))  # os.path.join(self.init_path, 'derivatives','bids_uploader')
+            os.makedirs(self.importation_path, exist_ok=True)
+            #self.bids_requirements_path = os.path.join(self.init_path, "code", "requirements.json")
+            dstdesc = self.bids_dataset['DatasetDescJSON']
+            protocole_name = dstdesc["Name"]
+            self.secret_key = protocole_name
         else:
-            raise TypeError('The argument should be path or Bids Dataset')
-        # ========= rajouter ici la creation de l'interface ========#
-        # Lecture des requirements :
-        # Pour initialiser le sujet avec les requirements ===============
-        self.requirements = self.bids_dataset.requirements
-        self.importation_path = os.path.normpath(os.path.join(self.init_path, ".."))
-        self.bids_requirements_path = os.path.join(self.init_path, "code", "requirements.json")
-        # b = ins_bids_class.Data2Import(requirements_fileloc=self.bids_requirements_path)
-        # b.get_requirements(self.bids_requirements_path)
-        # b.requirements['Requirements']['Subject'].keys()
-        #self.requirements = b
+        # BIDS Uploader in sFTP mode
+            self.bids_manager_mode = False
+            self.init_path = os.getcwd()
+            requirements_file = os.path.join(self.init_path, 'config', 'requirements.json')
+            if os.path.exists(requirements_file):
+                self.requirements = ins_bids_class.Requirements(requirements_file)
+                ins_bids_class.Subject.keylist += [elmt for elmt in self.requirements['Requirements']['Subject']['keys']
+                                    if elmt not in ins_bids_class.Subject.keylist]
+                ins_bids_class.Subject.required_keys += [elmt for elmt in
+                                          self.requirements['Requirements']['Subject']['required_keys']
+                                          if elmt not in ins_bids_class.Subject.required_keys]
+            else:
+                raise FileNotFoundError('The requirements file doesn"t exist in the folder {}.'.format(os.path.join(self.init_path, 'config')))
+            self.importation_path = self.init_path
+            self.bids_dataset = None
+            # =========== Elements to change to send your data in sFTP in another center ==========
+            #host is the IP adress
+            self.host = 'cluster.thevirtualbrain.org'
+            #port is th sFTP port
+            self.port = '22'
+            self.username = 'phrc'
+            #private_key_path is the file with the ssh key. It has to be saved in config folder
+            self.private_key_path = os.path.join(self.init_path, 'config', 'PhrcPrivateKeyMarseille')
+            #protocole name is the name appearing in the datset_description of your BIDS dataset
+            protocole_name = 'phrc'
+            #secret key is the word used for anonymisation
+            self.secret_key = 'phrc'
         self.moda_needed = [moda for moda in self.requirements['Requirements'].keys()
                             if moda not in ["Subject"]]
-
-        dstdesc = self.bids_dataset['DatasetDescJSON']
-        protocole_name = dstdesc["Name"]
-        self.secret_key = protocole_name
         # ========================================================================================================== #
         self.setupUi(self)
         self.progressBar.setVisible(False)
         self.progressBar.setValue(0)
-        self.generic_uploader_version = str(1.05)
+        self.generic_uploader_version = str(1.1)
         self.setWindowTitle("BIDSUploader v" + self.generic_uploader_version)
         self.MenuList = self.ListMenuObject(self)
         self.listWidget.clear()
@@ -312,20 +318,43 @@ class GenericUploader(QtWidgets.QMainWindow, Ui_MainWindow):
             import_button.setToolTip("Choose " + str(import_button.parent().title()) + " to import")
         QtWidgets.qApp.processEvents()
 
+    def variable_initialization(self):
+        self.dateEdit.setDateTime(QtCore.QDateTime(QtCore.QDate(1753, 9, 14), QtCore.QTime(1, 0, 0)))
+        self.radioButtonM.setToolTip("Please select sex for ID creation")
+        self.radioButtonF.setToolTip("Please select sex for ID creation")
+        self.listWidget.setToolTip("Double click to check, modifiy or delete")
+        self.pushButtonValidation.setToolTip(
+            "Compare data and patient info, copy when validated, and anonymisation if checked")
+        self.pushButtonReset.setToolTip("re-initialize the window")
+        self.pushButtonFinish.setToolTip('Close the window and start the importation of the data selected by subject.')
+        init_path = self.init_path
+        self.last_path = init_path
+        self.log_path = os.path.join(self.importation_path, "importer_log")
+        # creation du dossier des logs
+        if not os.path.isdir(self.log_path):
+            os.mkdir(self.log_path)
+        # creation du fichier de log
+        curr_time = datetime.datetime.now().strftime('%d%m%Y-%H%M')
+        self.currentTimeStr = curr_time
+        self.log_filename = os.path.join(self.log_path, "importer_log_" + curr_time + ".log")
+        f = open(self.log_filename, "a+")
+        f.close()
+        self.Subject = {}
+        if not self.bids_manager_mode:
+            ssh = paramiko.SSHClient()
+            ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+            key = paramiko.RSAKey.from_private_key_file(self.private_key_path)
+            try:
+                ssh.connect(self.host, self.port, self.username, pkey=key)
+                ssh.close()
+            except Exception as e:
+                #QtWidgets.QMessageBox.critical(self, "connection error", str(e))
+                exit()
+
     def interactions_callbacks(self):
         self.radioButtonM.clicked.connect(self.standardize_info)
         self.radioButtonF.clicked.connect(self.standardize_info)
         self.anonymize_patient_checkBox.stateChanged.connect(self.display_id_textbox)
-        # self.listElectrodeTypes.itemClicked.connect(self.electrode_type)
-        # self.comboBoxImplantation.activated.connect(self.import_implantation_file)
-        # boucler pour les boutons
-        # self.import_neuroimagery.clicked.connect(self.import_neuroimagery_folder)
-        # self.import_ieeg.clicked.connect(self.import_ieeg_files)
-        # self.import_eeg.clicked.connect(self.import_eeg_files)
-        # self.import_meg.clicked.connect(self.import_meg_files)
-        '''self.groupBox_list[0].import_button.clicked.connect(lambda: self.import_files(0))
-        self.groupBox_list[1].import_button.clicked.connect(lambda: self.import_files(1))
-        self.groupBox_list[2].import_button.clicked.connect(lambda: self.import_files(2))'''
         for i in range(0, len(self.groupBox_list)):
             helper = lambda i: (lambda: self.import_files(i))
             self.groupBox_list[i].import_button.clicked.connect(helper(i))
@@ -333,11 +362,8 @@ class GenericUploader(QtWidgets.QMainWindow, Ui_MainWindow):
         self.pushButtonValidation.clicked.connect(self.validation)
         self.pushButtonFinish.clicked.connect(QtWidgets.QApplication.quit)
         self.listWidget.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
-        # self.listWidget.connect(self.listWidget, QtCore.SIGNAL("customContextMenuRequested(QPoint)"),
-        #          self.list_item_right_clicked)   QtCore.pyqtSignal(self.listWidget.customContextMenuRequested(QPoint))
         QPoint = QtGui.QCursor.pos()
         self.listWidget.itemDoubleClicked.connect(lambda: self.list_item_right_clicked(QPoint))
-        # self.pushButtonResume.clicked.connect(self.resume_of_subject)
 
     def mapping_subject2list(self, sub, delete_flag=None, curr_keys_dict=None):
         if self.maplist:
@@ -347,10 +373,6 @@ class GenericUploader(QtWidgets.QMainWindow, Ui_MainWindow):
         if not sub['sub']:
             QtWidgets.QMessageBox.critical(self, "subject id is empty")
             return "Pas de sujet"
-        # self.maplist.append({"Modality": "", "ID": sub["sub"], "Protocole : ": self.protocole1_name.toPlainText(),
-        #                      "curr_state": "invalid"})
-        # self.listWidget.addItem("ID : " + sub["sub"] + ", protocole : " + self.protocole1_name.toPlainText())
-        # self.listWidget.item(0).setText("ID : " + sub["sub"] + ", protocole : " + self.protocole1_name.toPlainText())
         if self.old_maplist:
             curr_state = self.old_maplist[0]["curr_state"]
         else:
@@ -441,19 +463,6 @@ class GenericUploader(QtWidgets.QMainWindow, Ui_MainWindow):
             return
 
     def update_subject_class(self, sub, removed_item, global_moda):
-        '''for global_moda in sub.keys():
-            if global_moda == "IeegGlobalSidecars":
-                scheme_type = ["Drawing", "Xray"]
-                if sub[global_moda]:
-                    for scheme in scheme_type:
-                        name_to_change = [(item["acq"], sub[global_moda].index(item)) for item in sub[global_moda] if
-                                          item["acq"].startswith(scheme)]
-                        r = re.compile("([a-zA-Z]+)([0-9]+)")
-                        for i in range(0, len(name_to_change)):
-                            name = r.match(name_to_change[i][0])
-                            new_name = name.group(1) + str(i + 1)
-                            sub[global_moda][name_to_change[i][1]]["acq"] = new_name
-                    return sub '''
         required_global_moda = self.requirements["Requirements"].keys()
         if global_moda in required_global_moda and global_moda not in ["IeegGlobalSidecars", "Subject"]:
             # start modif sam
@@ -476,22 +485,6 @@ class GenericUploader(QtWidgets.QMainWindow, Ui_MainWindow):
             for j in idx_of_interest:
                 sub[global_moda][j]["run"] = str(first_run + count)
                 count = count + 1
-            # task_existing = [task['task'] for task in sub[global_moda] if task['task']]
-            # task_existing_unique = list(set(task_existing))  # pour unicite
-            # type_existing = [task['acq'] for task in sub[global_moda] if task['acq']]
-            # type_existing_unique = list(set(type_existing))  # pour unicite
-            # for task in task_existing_unique:
-            #     if task == "seizure":
-            #         for typ in type_existing_unique:
-            #             run_to_change = [(item["run"], sub[global_moda].index(item)) for item in sub[global_moda] if
-            #                              item["task"] == task and item["acq"] == typ]
-            #             for i in range(0, len(run_to_change)):
-            #                 sub[global_moda][run_to_change[i][1]]["run"] = str(i + 1)
-            #     else:
-            #         run_to_change = [(item["run"], sub[key].index(item)) for item in sub[key] if
-            #                          item["task"] == task]
-            #         for i in range(0, len(run_to_change)):
-            #             sub[global_moda][run_to_change[i][1]]["run"] = str(i + 1)
             return sub
 
     def list_item_right_clicked(self, qpos):
@@ -616,30 +609,6 @@ class GenericUploader(QtWidgets.QMainWindow, Ui_MainWindow):
                 generic_age = str(age) + "," + str(month)
                 return generic_age, birth_date
 
-        def valide_mot(mot):
-            nfkd_form = unicodedata.normalize('NFKD', mot)
-            only_ascii = nfkd_form.encode('ASCII', 'ignore')  # supprime les accents et les diacritiques
-            only_ascii_string = only_ascii.decode('ASCII').upper()  # reconvertit les bytes en string
-            only_az = re.sub('[^A-Z]', '', only_ascii_string)  # supprime tout ce qui n'est pas [A-Z]
-            return only_az
-
-        def hash_object(obj):
-            clef256 = hashlib.sha256(obj.encode())
-            clef_digest = clef256.hexdigest()
-            clef = clef_digest[0:12]
-            return clef
-
-        def valide_date(d):
-            try:
-                dd = datetime.datetime.strptime(d, '%d/%m/%Y')
-            except:
-                return False
-            else:
-                if (dd < datetime.datetime(year=1800, month=1, day=1)) or (dd > datetime.datetime.now()):
-                    return False
-                else:
-                    return dd.strftime('%d%m%Y')
-
         def creation_id(last_name, first_name, birth_date_str_dd_mm_yyyy):
             if last_name and first_name and birth_date:
                 last_name_validated = valide_mot(str(last_name))
@@ -671,17 +640,12 @@ class GenericUploader(QtWidgets.QMainWindow, Ui_MainWindow):
                                 {'nom': last_name}, {'prenom': first_name}]
             if not args:
                 current_subject = ins_bids_class.Subject()
-                # current_subject.keys()
-                # currentSubject.update({'sub': ID, 'age': Age, 'sex': sex, 'eCRF': protocole})
-                # nouveau requierement sans eCRF
-                # current_subject.update({'sub': id, 'age': subj_age, 'sex': sex})
                 for id_dict in sub_id_dict_list:
                     if list(id_dict.keys())[0] in sub_required_keys:
                         current_subject.update({list(id_dict.keys())[0]: list(id_dict.values())[0]})
             else:
                 # gérer ici si déjà existant
                 for sub in args:
-                    # sub.update({'sub': ID, 'age': Age, 'sex': sex, 'eCRF': protocole})
                     sub.update({'sub': id})
                     for id_dict in sub_id_dict_list:
                         if list(id_dict.keys())[0] in sub_required_keys:
@@ -711,14 +675,9 @@ class GenericUploader(QtWidgets.QMainWindow, Ui_MainWindow):
         if (self.radioButtonM.isChecked() or self.radioButtonF.isChecked()) and str(
                 self.TextName.toPlainText()) != "" \
                 and self.TextPrenom.toPlainText() != "":
-        # if self.groupBox_implantation:
-        # self.groupBox_implantation.setEnabled(True)
             for groupBox in self.groupBox_list:
                 groupBox.setEnabled(True)
-            # self.groupBox_neuroimagerie.setEnabled(True)
-            # self.groupBox_seeg.setEnabled(True)
             self.groupBox_identite.setDisabled(True)
-            # self.groupBox_protocole.setDisabled(True)
         else:
             self.restart_groupbox_identite()
             return
@@ -729,42 +688,18 @@ class GenericUploader(QtWidgets.QMainWindow, Ui_MainWindow):
         # modif sam pour prise en compte des keys and not only required_keys
         sub_required_keys = self.requirements['Requirements']['Subject']['keys']
         if not self.Subject:
-            #sub_required_keys = self.requirements.required_keys
             # creation du sujet
             self.Subject = ins_bids_class.Subject()
-            # self.Subject = creation_sujet_bids(sub_required_keys, self.ID, birth_date, sexe, str(self.proto_name))
-        # else:
-            #sub_required_keys = self.requirements.required_keys
-            # self.Subject = creation_sujet_bids(sub_required_keys, self.ID, birth_date, sexe, str(self.proto_name),
-            #                                    self.Subject)
         self.Subject = creation_sujet_bids(sub_required_keys, self.ID, birth_date, sexe, str(self.proto_name),
                                            last_name_valid, first_name_valid, self.Subject)
         suj = self.Subject
-        # self.mapping_subject2list(suj)
         # Enabler les différents comboBox et afficher dans listWidget
         self.pushButtonValidation.setEnabled(True)
         self.pushButtonReset.setEnabled(True)
-        # self.listElectrodeTypes.setEnabled(True)
-        '''self.comboBoxImagerie.setEnabled(True)
-        self.comboBoxSeeg.setEnabled(True)'''
-        '''for import_button in self.import_button_list:
-            import_button.setEnabled(True)'''
-        # self.import_neuroimagery.setEnabled(True)
-        # self.import_ieeg.setEnabled(True)
-        # self.import_meg.setEnabled(True)
-        # self.import_eeg.setEnabled(True)
         for groupBox in self.groupBox_list:
             groupBox.setEnabled(True)
             groupBox.import_button.setEnabled(True)
-#        if self.groupBox_implantation:
-#            self.groupBox_implantation.setEnabled(True)
-        # self.groupBox_neuroimagerie.setEnabled(True)
-        # self.groupBox_seeg.setEnabled(True)
         self.groupBox_validation.setEnabled(True)
-        # self.pushButtonAddiFiles.setEnabled(True)
-        # self.pushButtonFichePatient.setEnabled(True)
-#         self.pushButtonResume.setEnabled(True)
-        # patient_info_gui = patient_requirements_class.PatientRequirementsClass(self.requirements, sexe, suj["age"])
         patient_info_gui = patient_requirements_class.PatientRequirementsClass(self.requirements, suj)
         res = patient_info_gui.exec_()
         if res == 0:
@@ -783,7 +718,6 @@ class GenericUploader(QtWidgets.QMainWindow, Ui_MainWindow):
 
     def creation_repertoire_temporaire(self):
         def creation_rep_temp_and_json(id, current_date, protocole_name, seeg_run_number):
-            # current_working_path = os.getcwd()
             current_working_path = self.importation_path
             temp_folder_path = os.path.join(current_working_path, "TempFolder4Upload")
             temp_patient_path = os.path.join(current_working_path, "TempFolder4Upload", id + "_" + protocole_name +
@@ -869,8 +803,6 @@ class GenericUploader(QtWidgets.QMainWindow, Ui_MainWindow):
                 QtWidgets.qApp.processEvents()
                 # ecriture du fichier texte avec la compagnie
                 for a in range(0, len(self.listElectrodeTypes.selectedItems())):
-                    # self.electrode_brand.append(str(schema_filename[i]) + ", " + files_type + str(cur_type_nb + 1) +
-                    #                             ", " + str(self.listElectrodeTypes.selectedItems()[a].text()))
                     self.electrode_brand.append(
                         str(schema_filename[i]) + ", " + str(self.listElectrodeTypes.selectedItems()[a].text()))
             # remise à 0 du combobox et remplissage de la liste
@@ -947,10 +879,6 @@ class GenericUploader(QtWidgets.QMainWindow, Ui_MainWindow):
                 return 0
         if sub == 0:
             return 0
-        # if modality_gui.flag_emptyroom:
-        #     self.SubjectEmpty = sub
-        # else:
-        #     self.Subject = sub
         # pour bien remplir la liste :
         self.mapping_subject2list(sub)
         if modality_gui.flag_emptyroom:
@@ -959,7 +887,6 @@ class GenericUploader(QtWidgets.QMainWindow, Ui_MainWindow):
             self.SubjectEmpty['Meg'][-1].update(dict2append)
             self.SubjectEmpty['Meg'][-1]['sub'] = 'emptyroom'
         QtWidgets.qApp.processEvents()
-
 
     def find_position_on_screen(self, widget):
         ancetre = widget
@@ -973,24 +900,13 @@ class GenericUploader(QtWidgets.QMainWindow, Ui_MainWindow):
     def raz_gui(self):
         self.TextPrenom.setPlainText("")
         self.TextName.setPlainText("")
-        # self.groupBox_identite.setDisabled(True)
         self.restart_groupbox_identite()
-        # self.pushButtonAddiFiles.setDisabled(True)
-        # self.pushButtonFichePatient.setDisabled(True)
-        # self.protocole1_name.setDisabled(True)
-        # self.protocole1_name.setPlainText("")
-        # self.groupBox_protocole.setEnabled(True)
         ##Aude modif
         #self.groupBox_validation.setDisabled(True)
         self.pushButtonValidation.setDisabled(True)
         self.pushButtonReset.setDisabled(True)
-        '''if self.groupBox_implantation:
-            self.groupBox_implantation.setDisabled(True)
-        self.groupBox_neuroimagerie.setDisabled(True)
-        self.groupBox_seeg.setDisabled(True)'''
         for groupBox in self.groupBox_list:
             groupBox.setDisabled(True)
-#         self.pushButtonResume.setDisabled(True)
         self.listWidget.clear()
         self.variable_initialization()
 
@@ -1128,11 +1044,6 @@ class GenericUploader(QtWidgets.QMainWindow, Ui_MainWindow):
                 cur_state = validation_information(self.Subject, line, action)
             elif line["Modality"] == "IeegGlobalSidecars":
                 cur_state = validation_implantation(self.Subject, line, action)
-            # elif line["Modality"] == "Anat" or line["Modality"] == "Dwi":
-            # elif line["Modality"] in ["Anat", "Func", "Dwi"]:
-            #    cur_state = validation_neuroimagerie(self.Subject, line, action, line["Modality"])
-            # elif line["Modality"] == "Ieeg":
-            #     cur_state = validation_seeg(self.Subject, line, action)
             elif line["Modality"] not in ins_bids_class.GlobalSidecars.get_list_subclasses_names():
                 tmp_modality = getattr(ins_bids_class, line["Modality"])()
                 if isinstance(tmp_modality, ins_bids_class.Imaging):
@@ -1144,10 +1055,6 @@ class GenericUploader(QtWidgets.QMainWindow, Ui_MainWindow):
                         "reflechir a valider la meg ou neurophy de facon generale"
                         self.listWidget.item(action).setForeground(QtGui.QColor("green"))
                         self.maplist[action]["curr_state"] = "valid"
-            # elif line["Modality"] == "" and "Addi_file_path" in line:
-            #     cur_state = validation_addi_files(self.Subject, line, action)
-            # elif line["Modality"] == "" and "fiche_patient" in line:
-            #     cur_state = validation_fiche_patient_files(self.Subject, line, action)
             if cur_state == 0:
                 qmesbox = QtWidgets.QMessageBox(self)
                 qmesbox.setText("problem in validating files " + line["Modality"] + str(error))
@@ -1209,11 +1116,7 @@ class GenericUploader(QtWidgets.QMainWindow, Ui_MainWindow):
                 elif isinstance(tmp_modality, ins_bids_class.Electrophy) or os.path.isfile(src_path):
                     dest_filename = os.path.join(temp_path, filename + file_extension)
                     dest4data2import = filename + file_extension
-                # elif classe == "IeegGlobalSidecars":
             else:
-                # if isinstance(classe, ins_bids_class.GlobalSidecars):
-                # acq = sujet[item["Modality"]][item["Index"]]["acq"]
-                # new_filename = acq
                 new_filename = filename
                 dest_filename = os.path.join(temp_path, new_filename + file_extension)
                 dest4data2import = new_filename + file_extension
@@ -1242,12 +1145,8 @@ class GenericUploader(QtWidgets.QMainWindow, Ui_MainWindow):
             elif classe in ["Anat", "Dwi", "Func"]:
                 try:
                     anonymize_dcm(dest_filename, dest_filename, sub_id, sub_id, True, False)
-                    # suppression pour ne garder que les Dicoms
-                    # os.remove(dest_filename)
-                    # return
                 except :
                     print('')
-                    # anonymiser aussi les niftii ici
 
         def local_copy_and_anonymization(file_class, src, dest, sub_id, *modality):
             if os.path.isdir(src):
@@ -1263,11 +1162,8 @@ class GenericUploader(QtWidgets.QMainWindow, Ui_MainWindow):
                         else:
 
                             shutil.copy2(os.path.join(src, files), dest)
-                            # try:
                             if self.anonymize_patient_checkBox.isChecked():
                                 anonymize(file_class, os.path.join(dest, files), sub_id)
-                            # except:   # pour ne pas anonymiser si pas fichiers dicom
-                            #     continue
                     except Exception as e:
                         w = QtWidgets.QWidget(self)
                         QtWidgets.QMessageBox.critical(w, "Erreur", "Incorrect File format. " + str(e))
@@ -1366,19 +1262,10 @@ class GenericUploader(QtWidgets.QMainWindow, Ui_MainWindow):
             data_to_import['Subject'] = self.SubjectEmpty
         data_to_import['Subject'] = self.Subject
         data_to_import.save_as_json()
-        # # creation du fichier electrode_company
-        # company_list = []
-        # for line in self.electrode_brand:
-        #     company = line.split(", ")[1]
-        #     company_list.append(company)
-        #     company_list = list(set(company_list))
-        # if company_list:
-        #     f = open(os.path.join(temp_patient_path, "electrode_company.txt"), "w+")
-        #     for a in range(0, len(company_list)):
-        #         f.write(company_list[a] + "\n")
-        #     f.close()
         # AJOUTER ICI LE TRANSFERT PAR SFTP
-
+        if not self.bids_manager_mode:
+            data_transfert_sftp(self.host, self.port, self.username, self.private_key_path, '',
+                            temp_patient_path, 'uploader_folder')
         # ====================================================
         # rajouter ici la RAZ GUI
         self.progressBar.setValue(0)
@@ -1399,17 +1286,9 @@ class GenericUploader(QtWidgets.QMainWindow, Ui_MainWindow):
             self.pushButtonSEEG.setDisabled(True)
 
     def disable_gui(self):
-        # self.listElectrodeTypes.setDisabled(True)
-        # self.comboBoxImplantation.setDisabled(True)
-        # self.comboBoxImagerie.setDisabled(True)
-        # self.comboBoxSeeg.setDisabled(True)
-        # self.pushButtonAddiFiles.setDisabled(True)
         self.pushButtonReset.setDisabled(True)
-#        self.pushButtonResume.setDisabled(True)
 
     def enable_gui(self):
-        # self.protocole1_name.setEnabled(True)
-        #self.push_raz_patient()
         self.raz_gui()
 
 
@@ -1457,15 +1336,11 @@ class DialogSeizureType(QtWidgets.QDialog):
 
 
 def call_generic_uploader(bids_path):
-    # print(sys.argv)
-    # print(len(sys.argv))
     QtCore.pyqtRemoveInputHook()
-    # app = QtWidgets.QApplication(sys.argv)
     app = QtWidgets.QApplication(sys.argv)
-    window = GenericUploader(bids_path)
+    window = GenericUploader(bids_path, bids_manager_mode=True)
     window.show()
     app.exec_()
-    #sys.exit(app.exec_())
 
 
 if __name__ == "__main__":
@@ -1473,12 +1348,12 @@ if __name__ == "__main__":
         print(sys.argv)
         print(len(sys.argv))
         QtCore.pyqtRemoveInputHook()
-        # app = QtWidgets.QApplication(sys.argv)
         app = QtWidgets.QApplication(sys.argv)
         if len(sys.argv) > 1:
-            window = GenericUploader(sys.argv[1])
+            window = GenericUploader(sys.argv[1], bids_manager_mode=False)
         else:
-            window = GenericUploader()
+            bids_path=None
+            window = GenericUploader(bids_path, bids_manager_mode=False)
         window.show()
         sys.exit(app.exec_())
     except:
