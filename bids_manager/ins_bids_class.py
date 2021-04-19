@@ -748,6 +748,10 @@ class BidsBrick(dict):
                                 curr_elec.sort()
                                 if not curr_elec == ref_elec:
                                     ref_elec = []
+                            # if ref_elec is empty at the end of the loop it means there are inconsistencies between
+                            # at least two electrodes.tsv files
+                            if not ref_elec:
+                                break
 
                         if not ref_elec:
                             str_issue = 'Subject ' + sub + ' has inconsistent electrodes.tsv files ' +\
@@ -1420,7 +1424,9 @@ class BidsTSV(BidsSidecar, list):
         if os.path.splitext(tsvfilename)[1] == '.tsv':
             with open(tsvfilename, 'w') as file:
                 for _, line in enumerate(self):
-                    file.write('\t'.join(line) + '\n')
+                    str_line = '\t'.join(line) + '\n'  # convert manually \\ path to / because it will be written as \ !!! TO BE CHECKED !!!
+                    str_line = str_line.replace('\\', '/')
+                    file.write(str_line)
             if platform.system() == 'Linux':
                 chmod_recursive(tsvfilename, 0o777)
         else:
@@ -1491,6 +1497,11 @@ class ChannelsTSV(BidsTSV):
     required_fields = ['name', 'type', 'units', 'sampling_frequency', 'low_cutoff', 'high_cutoff', 'notch', 'reference']
     modality_field = 'channels'
 
+
+class ElecTSV(BidsTSV):
+    required_fields = ['name', 'x', 'y', 'z']
+    header = required_fields + ['type', 'material', 'impedance']
+    modality_field = 'electrodes'
 
 class GlobalSidecars(BidsBrick):
     keylist = BidsBrick.keylist + ['ses', 'space', 'modality', 'fileLoc']
@@ -1674,7 +1685,7 @@ class IeegEventsTSV(EventsTSV):
     pass
 
 
-class IeegElecTSV(BidsTSV):
+class IeegElecTSV(ElecTSV):
     required_fields = ['name', 'x', 'y', 'z', 'size']
     header = required_fields + ['material', 'manufacturer', 'group', 'hemisphere'] + ['type', 'impedance', 'dimension']
     modality_field = 'electrodes'
@@ -1710,7 +1721,7 @@ class Eeg(Electrophy):
                                    'EegChannelsTSV', 'EegEventsTSV']
     required_keys = Electrophy.required_keys + ['task', 'modality']
     allowed_modalities = ['eeg']
-    allowed_file_formats = ['.edf', '.vhdr']#, '.set'
+    allowed_file_formats = ['.edf', '.vhdr', '.set', '.bdf']
     readable_file_formats = allowed_file_formats + ['.trc', '.fif', '.ds'] #, '.mff', '.eeg', '.ades', '.cnt', '.mat',
     channel_type = Electrophy.channel_type + ['GSR', 'REF', 'RESP', 'TEMP']
     mod_channel_type = ['EEG']
@@ -1745,10 +1756,8 @@ class EegEventsTSV(EventsTSV):
     pass
 
 
-class EegElecTSV(BidsTSV):
-    required_fields = ['name', 'x', 'y', 'z']
-    header = required_fields + ['type', 'material', 'impedance']
-    modality_field = 'electrodes'
+class EegElecTSV(ElecTSV):
+    pass
 
 
 class EegCoordSysJSON(BidsJSON):
@@ -2153,7 +2162,7 @@ class Subject(BidsBrick):
 
     def check_file_in_scans(self, filename, mod_dir):
         def scan_in_file(scan_tsv, filescan):
-            line = [scan[0] for scan in scan_tsv[1:]]
+            line = [os.path.normpath(scan[0]) for scan in scan_tsv[1:]]
             if filescan not in line:
                 scan_tsv.append({'filename': filescan, 'acq_time': '1900-01-01T00:00:00'})
 
@@ -3555,7 +3564,7 @@ class BidsDataset(MetaBrick):
         # a bit bulky rewrite to make it nice
         if element2remove is self and not isinstance(element2remove, Pipeline):
             shutil.rmtree(self.dirname)
-            print('The whole Bids dataset ' + self['DatasetDescJSON']['Name'] + ' has been removed')
+            print('The whole BIDS dataset ' + self['DatasetDescJSON']['Name'] + ' has been removed')
             BidsDataset.clear_log()
             self.issues.clear()
             self.clear()
