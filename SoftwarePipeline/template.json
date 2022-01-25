@@ -1,50 +1,58 @@
-{"Name": "",
- "Path": "",
- "Parameters":{ #Should be in the command line order
-	"Mode": ["automatic", "manual"],
-	"command_line_base": "", #OPTIONAL
-	"Intermediate": "", #OPTIONAL possibilities: Matlab, AnyWave, Python
-	"Callname": "",
+{"Name": "",							#Name of the module
+ "Path": "",							#Path of the module
+ "Parameters":{ 						#Should be in the command line order
+	"Mode": ["automatic", "manual"],	#Choose if the analyis should be done automatically or manually
+	"command_line_base": "", 			#OPTIONAL
+	"Intermediate": "", 				#OPTIONAL possibilities: Matlab, AnyWave, Python
+	"Callname": "",						#Name to call the module
 	"Input": [
 		{ 
-		 "tag": "", 
-		 "multiplesubject": true or false, 
-		 "modality": [], 
-		 "type": "dir" or "file", 
-		 #the following part is optional, you should mention it if the input of your software is located in derivatives folder.
-		 "deriv-folder": "", #No value needed, it will be offered to the user according to the derivatives folders presents in bids dataset
-		 "filetype": "", #give the file extension
-		 "optional": true or false
-		 } #tag is the key of this argument in the command line. modality is to know which data is taken in entry.
-		#if multiple dictionnary, it means the software needs multiple entry
+		"Tag": "", 						#Tag is the key of this argument in the command line. 
+		"MultipleSubject": true/false, 	#To know if the module can handle data of multiple subject at once
+		"Modality": [], 				#Modality is to know which data is taken as input.
+		"Type": "",						#Type indicate if it is a file or a folder (i.e "dir", "file", "4D" or "montage")
+		"DerivFolder": "", 				#Adding this key means the input files are in one derivatives folder
+		"FileType": "",					#This key is coming with the 'DerivFolder' one, indicating which file is 
+										#required as input (e.g. "*.mat")
+		"CombinationMode": true/false,	#This key is to indicate, if multiple inputs, BMP has to use the same file with differents files of the other input								
+		"Optional": true/false			#Saying if this input is required or not
+		} 								#if multiple dictionnary, it means the module needs multiple entry
 		],
 	"Output": {
-		"tag": "", #tag is the key of this argument in the command line
-		"multiplesubject": true or false,
-		"directory": true or false, #fileloc is fill in by bids manager to give the localisation to write the results
-		"type": "dir" or "file", 
-		"extension": []#Give the type of output ex: tsv, pdf
-		#if all the key are empty, it means the software write by himself the result in the appropriate folder or there is no output
+		"Tag": "", 						#Tag is the key of this argument in the command line
+		"MultipleSubject": true/false,
+		"Directory": true/false,		#Direcory is fill in by bids manager to give the localisation to write the results
+		"Type": "dir" or "file", 		#If the module require pathname or filename as output
+		"Extension": ""					#Give the type of output ex, tsv, pdf
+										#if all the key are empty, it means the module write by himself the result 
+										#in the appropriate folder or there is no output
 	},
-	"key": { #key is an argument of the software, it can be start, duration, etc
-		"default": "", #default value, but user will have the chance to modify it
-		"unit": ""
-		},
+	"key": { 							#key is an argument of the module, the one appearing in the command line
+		#Number type
+		"Default": "", 					#default value, but user will have the chance to modify it
+		"Unit": ""
 		OR
-		"read": "", #read a file in the bids directory to give a list of possibility to the user
-		"elementstoread": "", #Give the index or the header name to read
-		"multipleselection": true or false
+		#Value read in the database
+		"Read": "", 					#file name/type to read in the bids directory to give a selection to the user
+		"ElementsToRead": "", 			#Give the indndex or the header to read
+		"MultipleSelection": true/false	#If the user can select multiple variable for this parameter
 		OR
-		"possible_value": [], #list of possible value
-		"multipleselection": true or false
+		#Specific Value
+		"PossibleValue": [], 			#values that user can choose
+		"MultipleSelection": true/false
 		OR
-		"fileLoc": "", #User has to specify filename with path (select from GUI)
-		"extension": "" #extension of the selected file
+		#Path to a file
+		"FileLoc": "", 					#User has to specify filename with path (select from GUI)
+		"Extension": ""
 		OR
-		"default": true or false #Boolean choice to put this parameter or not in the command line
+		#Boolean Value
+		"Default": true/false,
+		"InCommandLine": true/false		#Boolean choice to put this parameter or not in the command line
 		OR
-		"readbids": true, #those arguments is to specify the software needs specific values from bids specificity
-		"type": "", #e.g sub, ses, task, acq, modality, etc
+		#Value specific to BIDS
+		"ReadBids": true, 				#those arguments is to specify the module needs specific values from bids specificity
+		"Type": "", 					#e.g sub, ses, task, acq, modality, etc
+		}
 	}
 }
 

@@ -5,68 +5,68 @@
 	"command_line_base": "",
 	"Intermediate": "Docker",
 	"Callname": "bids/freesurfer",
-	"participant": {"default": false, "incommandline": false},
-	"group": {"default": false, "incommandline": false},
+	"participant": {"Default": false, "InCommandLine": false},
+	"group": {"Default": false, "InCommandLine": false},
 	"--participant_label": {
-	 "readbids": true,
-	 "type": "sub"
+	 "ReadBids": true,
+	 "Type": "sub"
 	},
 	"--session_label": {
-	 "readbids": true,
-	 "type": "ses"
+	 "ReadBids": true,
+	 "Type": "ses"
 	},
 	"--n_cpus": {
-	 "default": "",
-	 "unit":"nbr_of_cpus"
+	 "Default": "",
+	 "Unit":"nbr_of_cpus"
 	},
 	"--stages": {
-	 "possible_value": ["autorecon1", "autorecon2", "autorecon2-cp", "autorecon2-wm", "autorecon-pial", "autorecon3", "autorecon-all", "all"],
-	 "multipleselection": true
+	 "PossibleValue": ["autorecon1", "autorecon2", "autorecon2-cp", "autorecon2-wm", "autorecon-pial", "autorecon3", "autorecon-all", "all"],
+	 "MultipleSelection": true
 	},
 	"--steps": {
-	 "possible_value": ["cross-sectional", "template", "longitudinal"],
-	 "multipleselection": true
+	 "PossibleValue": ["cross-sectional", "template", "longitudinal"],
+	 "MultipleSelection": true
 	},
 	"--template_name": {
-	 "default": "average",
-	 "unit": ""
+	 "Default": "average",
+	 "Unit": ""
 	},
 	"--license_file": {
-	 "fileLoc": "",
-	 "extension": "txt"
+	 "FileLoc": "",
+	 "Extension": "txt"
 	},
 	"--acquisition_label": {
-	 "readbids": true,
-	 "type": "acq"
+	 "ReadBids": true,
+	 "Type": "acq"
 	},
 	"--refine_pial_acquisition": {
-	 "readbids": true,
-	 "type": "acq"
+	 "ReadBids": true,
+	 "Type": "acq"
 	},
 	"--multiple_sessions": {
-	 "possible_value": ["longitudinal", "multiday"],
-	 "multipleselection": false
+	 "PossibleValue": ["longitudinal", "multiday"],
+	 "MultipleSelection": false
 	},
 	"--refine_pial": {
-	 "possible_value": ["T2", "FLAIR", "T1only", "None"],
-	 "multipleselection": false
+	 "PossibleValue": ["T2", "FLAIR", "T1only", "None"],
+	 "MultipleSelection": false
 	},
 	"--hires_mode": {
-	 "possible_value": ["auto", "enable", "disable"],
-	 "multipleselection": false
+	 "PossibleValue": ["auto", "enable", "disable"],
+	 "MultipleSelection": false
 	},
 	"--parcellations": {
-	 "possible_value": ["aparc", "aparc.a2009s"],
-	 "multipleselection": true
+	 "PossibleValue": ["aparc", "aparc.a2009s"],
+	 "MultipleSelection": true
 	},
 	"--measurements": {
-	 "possible_value": ["area", "volume", "thickness", "thicknessstd", "meancurv", "gauscurv", "foldind", "curvind"],
-	 "multipleselection": true
+	 "PossibleValue": ["area", "volume", "thickness", "thicknessstd", "meancurv", "gauscurv", "foldind", "curvind"],
+	 "MultipleSelection": true
 	},
 	"--bids_validator_config": {
-	 "fileLoc": "",
-	 "extension": "json"
+	 "FileLoc": "",
+	 "Extension": "json"
 	},
-	"--skip_bids_validator": {"default": false, "incommandline": false}
+	"--skip_bids_validator": {"Default": false, "InCommandLine": false}
    }
 }

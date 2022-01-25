@@ -1,103 +1,103 @@
 {
- "Name": "delphos",
+ "Name": "",
  "Path": "",
  "Parameters": {
   "Mode": [
    "automatic"
   ],
-  "Callname": "Delphos4BIDS",
+  "Callname": "",
   "Input": [
    {
-    "tag": "",
-    "multiplesubject": true,
-    "modality": [
+    "Tag": "",
+    "MultipleSubject": true,
+    "Modality": [
      "Ieeg",
      "Meg",
      "Eeg"
     ],
-    "type": "dir"
+    "Type": "dir"
    }
   ],
   "modality": {
-   "readbids": true,
-   "type": "modality"
+   "ReadBids": true,
+   "Type": "modality"
   },
   "sub": {
-   "readbids": true,
-   "type": "sub"
+   "ReadBids": true,
+   "Type": "sub"
   },
   "ses": {
-   "readbids": true,
-   "type": "ses"
+   "ReadBids": true,
+   "Type": "ses"
   },
   "task": {
-   "readbids": true,
-   "type": "task"
+   "ReadBids": true,
+   "Type": "task"
   },
   "acq": {
-   "readbids": true,
-   "type": "acq"
+   "ReadBids": true,
+   "Type": "acq"
   },
   "run": {
-   "readbids": true,
-   "type": "run"
+   "ReadBids": true,
+   "Type": "run"
   },
   "proc": {
-   "readbids": true,
-   "type": "proc"
+   "ReadBids": true,
+   "Type": "proc"
   },
   "start": {
-   "default": 0,
-   "unit": "sec"
+   "Default": 0,
+   "Unit": "sec"
   },
   "duration": {
-   "default": -1,
-   "unit": "sec"
+   "Default": -1,
+   "Unit": "sec"
   },
   "detection_type": {
-   "possible_value": [
+   "PossiblValue": [
     "Osc",
     "Spk"
    ],
-   "multipleselection": true
+   "MultipleSelection": true
   },
   "freq_band_start": {
-   "default": 8,
-   "unit": "Hz"
+   "Default": 8,
+   "Unit": "Hz"
   },
   "freq_band_end": {
-   "default": -1,
-   "unit": "Hz"
+   "Default": -1,
+   "Unit": "Hz"
   },
   "artefact": {
-   "possible_value": [
+   "PossiblValue": [
     "Baseline",
     "Stim",
 	"artefact"
    ],
-   "multipleselection": false
+   "MultipleSelection": false
   },
   "use_markers": {
-   "possible_value": [
+   "PossiblValue": [
     "Baseline",
     "Stim"
    ],
-   "multipleselection": false
+   "MultipleSelection": false
   },
   "threshold": {
-   "default": "40",
-   "unit": ""
+   "Default": "40",
+   "Unit": ""
   },
   "freqbandfile": {
-   "fileLoc": "",
-   "extension": ".txt"
+   "FileLoc": "",
+   "Extension": ".txt"
   },
   "Output": {
-   "tag": "derivatives",
-   "multiplesubject": true,
-   "directory": true,
-   "type": "",
-   "extension": [
+   "Tag": "derivatives",
+   "MultipleSubject": true,
+   "Directory": true,
+   "Type": "",
+   "Extension": [
     ".jpg",
     ".mat",
     ".tsv",

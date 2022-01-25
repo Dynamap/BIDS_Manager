@@ -1,7 +1,10 @@
-#     BIDS Manager collect, organise and manage data in BIDS format.
+# -*- coding: utf-8 -*-
+
+#     BIDS Uploader collect, creates the data2import requires by BIDS Manager
+#     and transfer data if in sFTP mode.
 #     Copyright © 2018-2020 Aix-Marseille University, INSERM, INS
 #
-#     This file is part of BIDS Manager.
+#     This file is part of BIDS Uploader.
 #
 #     BIDS Manager is free software: you can redistribute it and/or modify
 #     it under the terms of the GNU General Public License as published by

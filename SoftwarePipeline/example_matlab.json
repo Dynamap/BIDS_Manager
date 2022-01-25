@@ -1,56 +1,56 @@
 {
- "Name": "Graphmeasure",
+ "Name": "",
  "Path": "Path/file.m",
  "Parameters": {
   "Mode": [
    "automatic"
   ],
-  "Callname": "GraphMeasure",
+  "Callname": "",
   "Intermediate": "Matlab",
   "Input": [
    {
-    "tag": "",
-    "multiplesubject": false,
-    "modality": [
+    "Tag": "",
+    "MultipleSubject": false,
+    "Modality": [
      "Ieeg",
      "Eeg",
      "Meg"
     ],
-    "type": "file",
-    "deriv-folder": "",
-    "filetype": ".mat",
-    "optional": false
+    "Type": "file",
+    "DerivFolder": "",
+    "FileType": ".mat",
+    "Optional": false
    }
   ],
   "Output": {
-   "tag": "output_dir",
-   "multiplesubject": false,
-   "directory": true,
-   "type": "dir",
-   "extension": [
+   "Tag": "output_dir",
+   "MultipleSubject": false,
+   "Directory": true,
+   "Type": "dir",
+   "Extension": [
     ".tsv",
     ".jpg"
    ]
   },
   "h2_threshold": {
-   "default": "0",
-   "unit": ""
+   "Default": "0",
+   "Unit": ""
   },
   "lag_threshold": {
-   "default": "1",
-   "unit": ""
+   "Default": "1",
+   "Unit": ""
   },
   "degree": {
-   "default": true,
-   "incommandline": true
+   "Default": true,
+   "InCommandLine": true
   },
   "strength": {
-   "default": true,
-   "incommandline": true
+   "Default": true,
+   "InCommandLine": true
   },
   "all_markers_together": {
-   "default": true,
-   "incommandline": true
+   "Default": true,
+   "InCommandLine": true
   }
  }
 }

@@ -1,9 +1,10 @@
-# -*- coding: utf-8 -*-<
+# -*- coding: utf-8 -*-
 
-#     BIDS Manager collect, organise and manage data in BIDS format.
+#     BIDS Uploader collect, creates the data2import requires by BIDS Manager
+#     and transfer data if in sFTP mode.
 #     Copyright © 2018-2020 Aix-Marseille University, INSERM, INS
 #
-#     This file is part of BIDS Manager.
+#     This file is part of BIDS Uploader.
 #
 #     BIDS Manager is free software: you can redistribute it and/or modify
 #     it under the terms of the GNU General Public License as published by
@@ -29,14 +30,18 @@ except AttributeError:
     def _fromUtf8(s):
         return s
 
+
 class PatientRequirementsClass(QtWidgets.QDialog):
     def __init__(self, requirements, suj):
         QtWidgets.QDialog.__init__(self)
         self.setObjectName("Requirements windows")
         self.setWindowTitle("Requirements windows")
-        screen_geom = self.screen().geometry()
-        screen_width = screen_geom.width()
-        screen_height = screen_geom.height()
+        try:
+            screen_geom = self.screen().geometry()
+            screen_width = screen_geom.width()
+            screen_height = screen_geom.height()
+        except AttributeError:
+            screen_width = 1920
         font = QtGui.QFont()
         font.setFamily(_fromUtf8("Segoe UI"))
         font.setPointSize(8)

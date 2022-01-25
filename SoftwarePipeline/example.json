@@ -1,0 +1,24 @@
+{
+ "Name": "example",
+ "Path": "",
+ "Parameters": {
+  "Mode": [
+   "automatic"
+  ],
+  "command_line_base": "docker run -i --rm",
+  "Intermediate": "Docker",
+  "Callname": "bids/example",
+  "participant": {
+   "Default": false,
+   "InCommandLine": false
+  },
+  "group": {
+   "Default": false,
+   "InCommandLine": false
+  },
+  "--participant_label": {
+   "ReadBids": true,
+   "Type": "sub"
+  }
+ }
+}

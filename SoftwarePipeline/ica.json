@@ -1,0 +1,85 @@
+{
+ "Name": "ICA",
+ "Path": "",
+ "Parameters": {
+  "Mode": [
+   "automatic"
+  ],
+  "Intermediate": "AnyWave",
+  "Callname": "ica",
+  "hp": {
+   "Default": "0",
+   "Unit": "Hz"
+  },
+  "lp": {
+   "Default": "0",
+   "Unit": "Hz"
+  },
+  "comp": {
+   "Default": "",
+   "Unit": "components"
+  },
+  "downsampling": {
+   "Default": true,
+   "InCommandLine": true
+  },
+  "modality": {
+   "ReadBids": true,
+   "Type": "modality"
+  },
+  "output_file": {
+   "ReadBids": true,
+   "Type": "file"
+  },
+  "use_markers": {
+   "Read": "*_events.tsv",
+   "ElementsToRead": "trial_type",
+   "MultipleSelection": true
+  },
+  "skip_markers": {
+   "PossibleValue": [
+    "Artefact"
+   ],
+   "MultipleSelection": false
+  },
+  "create_montage": {
+   "PossibleValue": [
+    "bipolar_ieeg",
+    "none"
+   ],
+   "MultipleSelection": false
+  },
+  "montage_file": {
+   "Default": "",
+   "Unit": ""
+  },
+  "skip_bad_channels": {
+   "Default": true,
+   "InCommandLine": true
+  },
+  "save_comp_traces": {
+   "Default": false,
+   "InCommandLine": false
+  },
+  "Input": [
+   {
+    "Tag": "--input_file",
+    "MultipleSubjects": false,
+    "Modality": [
+     "Ieeg",
+     "Meg",
+     "Eeg"
+    ],
+    "Type": "file",
+    "CombinationMode": false
+   }
+  ],
+  "Output": {
+   "Tag": "--output_dir",
+   "MultipleSubjects": false,
+   "Directory": true,
+   "Type": "",
+   "Extension": ".mat"
+  }
+ }
+}

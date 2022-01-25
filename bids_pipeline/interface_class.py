@@ -1,5 +1,46 @@
+#!/usr/bin/python3
+# -*-coding:Utf-8 -*
+
+#     BIDS Pipeline select and analyse data in BIDS format.
+#     Copyright © 2018-2020 Aix-Marseille University, INSERM, INS
+#
+#     This file is part of BIDS Pipeline. This file manages the graphical interfaces.
+#
+#     BIDS Pipeline is free software: you can redistribute it and/or modify
+#     it under the terms of the GNU General Public License as published by
+#     the Free Software Foundation, either version 3 of the License, or
+#     any later version
+#
+#     BIDS Pipeline is distributed in the hope that it will be useful,
+#     but WITHOUT ANY WARRANTY; without even the implied warranty of
+#     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#     GNU General Public License for more details.
+#
+#     You should have received a copy of the GNU General Public License
+#     along with BIDS Pipeline.  If not, see <https://www.gnu.org/licenses/>
+#
+#     Authors: Aude Jegou, 2019-2021
+
 import os
 import bids_manager.ins_bids_class as bids
+from bids_manager.ins_anywave import anywave_ext
+
+
+def compare_listes(liste_final, liste_file, get_only_common=False):
+    is_same = True
+    new_liste_final = []
+    sX = set(liste_final)
+    sY = set(liste_file)
+    set_common = sX - sY
+    if not set_common == sX:
+        is_same = False
+    if not get_only_common:
+        for elt in liste_file:
+            if elt not in liste_final:
+                liste_final.append(elt)
+    else:
+        new_liste_final = [elt for elt in list(sX.intersection(sY))]
+    return is_same, new_liste_final
 
 
 class Interface(dict):
@@ -25,7 +66,11 @@ class Interface(dict):
 
         participant_dict = self.bids_data['ParticipantsTSV']
         req_keys = self.bids_data.requirements['Requirements']['Subject']['keys']
-        display_dict = {key: value for key, value in req_keys.items() if value or 'age' in key or 'duration' in key}
+        if isinstance(req_keys, dict):
+            display_dict = {key: value for key, value in req_keys.items() if value or 'age' in key or 'duration' in key}
+        elif isinstance(req_keys, list):
+            display_dict = {key: '' for key in req_keys if 'age' in key or 'duration' in key}
+        #display_dict = {key: value for key, value in req_keys.items() if value or 'age' in key or 'duration' in key}
         # for key, value in req_keys.items():
             # if value:
             #     display_dict[key] = value
@@ -106,6 +151,7 @@ class Interface(dict):
                 if key in res_dict and key in res_dict[key]:
                     res_dict[key] = res_dict[key].replace('_'+key, '')
             elif att_type == 'Listbox':
+                val_temp = self[key]['results']
                 res_dict[key] = val_temp.get()
             elif att_type == 'Bool':
                 if val_temp.get() == True:
@@ -113,13 +159,14 @@ class Interface(dict):
             elif att_type == 'Label':
                 res_dict[key] = val_temp
             elif att_type == 'File':
-                if len(val_temp) >1 and val_temp[1]:
+                if len(val_temp) > 1 and val_temp[1]:
                     if isinstance(val_temp[1], list):
                         res_dict[key] = ', '.join(val_temp[1])
                     else:
                         res_dict[key] = val_temp[1]
 
         return res_dict
+
 
     def get_subject_list(self, input_dict):
         subject_list = []
@@ -152,23 +199,27 @@ class Interface(dict):
 
 
 class ParameterInterface(Interface):
-    unit_value = ['default', 'unit']
-    read_value = ['read', 'elementstoread', 'multipleselection']
-    list_value = ['possible_value', 'multipleselection']
-    file_value = ['fileLoc', 'extension']
-    bool_value = ['default', 'incommandline']
-    bids_value = ['readbids', 'type']
+    unit_value = ['Default', 'Unit']
+    read_value = ['Read', 'ElementsToRead', 'MultipleSelection']
+    list_value = ['PossibleValue', 'MultipleSelection']
+    file_value = ['FileLoc', 'Extension']
+    bool_value = ['Default', 'InCommandLine']
+    bids_value = ['ReadBids', 'Type']
+    savereadingbysub = {}
 
-    def __init__(self, bids_data, parameter_soft=None):
+    def __init__(self, bids_data, parameter_soft=None, nbr=None):
+        nb = ''
+        if nbr is not None:
+            nb = str(nbr) + '_'
         self.bids_data = bids_data
         if parameter_soft:
-            self.parameters = {key: value for key, value in parameter_soft.items() if key not in ['Input', 'Output', 'Callname', 'command_line_base', 'Intermediate']}
+            self.parameters = {nb+key: value for key, value in parameter_soft.items() if key not in ['Input', 'Output', 'Callname', 'command_line_base', 'Intermediate']}
             self.vars_interface()
 
     def vars_interface(self):
         for key in self.parameters:
             self[key] = {}
-            if key == 'Mode':
+            if 'Mode' in key:
                 if len(self.parameters[key]) > 1:
                     self[key]['attribut'] = 'Listbox'
                     self[key]['value'] = self.parameters[key]
@@ -179,23 +230,24 @@ class ParameterInterface(Interface):
                 keys = list(self.parameters[key].keys())
                 if keys == self.unit_value:
                     self[key]['attribut'] = 'StringVar'
-                    self[key]['value'] = str(self.parameters[key]['default']) + self.parameters[key]['unit'] + '_' + key
-                    self[key]['unit'] = self.parameters[key]['unit']
+                    self[key]['value'] = str(self.parameters[key]['Default']) + self.parameters[key]['Unit'] + '_' + key
+                    self[key]['unit'] = self.parameters[key]['Unit']
                 elif keys == self.list_value:
-                    if self.parameters[key]['multipleselection']:
+                    if self.parameters[key]['MultipleSelection']:
                         st_type = 'Variable'
                     else:
                         st_type = 'Listbox'
                     self[key]['attribut'] = st_type
-                    self[key]['value'] = self.parameters[key]['possible_value']
+                    self[key]['value'] = self.parameters[key]['PossibleValue']
                 elif keys == self.file_value:  # A revoir
                     self[key]['attribut'] = 'File'
-                    self[key]['value'] = [self.parameters[key]['extension']]
+                    self[key]['value'] = [self.parameters[key]['Extension']]
                 elif keys == self.bool_value:
                     self[key]['attribut'] = 'Bool'
-                    self[key]['value'] = self.parameters[key]['default']
+                    self[key]['value'] = self.parameters[key]['Default']
                 elif keys == self.read_value:
-                    if self.parameters[key]['multipleselection']:
+                    self.savereadingbysub[key] = {}
+                    if self.parameters[key]['MultipleSelection']:
                         st_type = 'Variable'
                     else:
                         st_type = 'Listbox'
@@ -238,59 +290,72 @@ class ParameterInterface(Interface):
             f.close()
             return param
 
-        def compare_listes(liste_final, liste_file):
-            is_same = True
-            sX = set(liste_final)
-            sY = set(liste_file)
-            set_common = sX - sY
-            if not set_common == sX:
-                is_same = False
-            for elt in liste_file:
-                if elt not in liste_final:
-                    liste_final.append(elt)
-            return is_same
-
-        reading_file = self.parameters[key]['read'].strip('*')
-        elements = self.parameters[key]['elementstoread']
+        reading_file = self.parameters[key]['Read'].strip('*')
+        [filetype, ext] = reading_file.split('.')
+        if '.' + ext in anywave_ext:
+            dir2read = os.path.join(bids.BidsDataset.dirname, 'derivatives', 'anywave', bids.BidsBrick.curr_user)
+            if not os.path.exists(dir2read):
+                dir2read = os.path.join(bids.BidsDataset.dirname, 'derivatives', 'anywave', 'common')
+            if not os.path.exists(dir2read):
+                dir2read = self.bids_data.cwdir
+        else:
+            dir2read = self.bids_data.cwdir
+        elements = self.parameters[key]['ElementsToRead']
         mark_to_remove = ['?', '***', '*']
         param = []
+        parambysub = {}
         is_same = True
-        for subject in os.listdir(self.bids_data.cwdir):
-            if subject.endswith(reading_file) and os.path.isfile(os.path.join(self.bids_data.cwdir, subject)):
-                file_param = read_file(os.path.join(self.bids_data.cwdir, subject), elements)
+        for subject in os.listdir(dir2read):
+            if subject.endswith(reading_file) and os.path.isfile(os.path.join(dir2read, subject)):
+                file_param = read_file(os.path.join(dir2read, subject), elements)
                 if not param:
                     param = [elt for elt in file_param]
                 else:
-                    is_same = compare_listes(param, file_param)
+                    is_same, other = compare_listes(param, file_param)
+                if subject not in parambysub:
+                    parambysub[subject] = file_param
+                else:
+                    is_same, other = compare_listes(parambysub[subject], file_param)
                 break
-            elif subject.startswith('sub') and os.path.isdir(os.path.join(self.bids_data.cwdir, subject)):
-                for session in os.listdir(os.path.join(self.bids_data.cwdir, subject)):
-                    if os.path.isdir(os.path.join(self.bids_data.cwdir, subject, session)):
-                        for mod in os.listdir(os.path.join(self.bids_data.cwdir, subject, session)):
-                            if os.path.isdir(os.path.join(self.bids_data.cwdir, subject, session, mod)):
-                                with os.scandir(os.path.join(self.bids_data.cwdir, subject, session, mod)) as it:
+            elif subject.startswith('sub') and os.path.isdir(os.path.join(dir2read, subject)):
+                for session in os.listdir(os.path.join(dir2read, subject)):
+                    if os.path.isdir(os.path.join(dir2read, subject, session)):
+                        for mod in os.listdir(os.path.join(dir2read, subject, session)):
+                            if os.path.isdir(os.path.join(dir2read, subject, session, mod)):
+                                with os.scandir(os.path.join(dir2read, subject, session, mod)) as it:
                                     for entry in it:
                                         if entry.name.endswith(reading_file):
                                             file_param = read_file(entry.path, elements)
                                             if not param:
                                                 param = [elt for elt in file_param]
                                             else:
-                                                is_same = compare_listes(param, file_param)
+                                                is_same, other = compare_listes(param, file_param)
+                                            if subject not in parambysub:
+                                                parambysub[subject] = file_param
+                                            else:
+                                                is_same, other = compare_listes(parambysub[subject], file_param)
                             elif os.path.isfile(
-                                    os.path.join(self.bids_data.cwdir, subject, session, mod)) and mod.endswith(
+                                    os.path.join(dir2read, subject, session, mod)) and mod.endswith(
                                     reading_file):
-                                file_param = read_file(os.path.join(self.bids_data.cwdir, subject, session, mod),
+                                file_param = read_file(os.path.join(dir2read, subject, session, mod),
                                                        elements)
                                 if not param:
                                     param = [elt for elt in file_param]
                                 else:
-                                    is_same = compare_listes(param, file_param)
+                                    is_same, other = compare_listes(param, file_param)
+                                if subject not in parambysub:
+                                    parambysub[subject] = file_param
+                                else:
+                                    is_same, other = compare_listes(parambysub[subject], file_param)
         param = list(set(param))
         param.sort()
+        self.savereadingbysub[key] = parambysub
         return [par for par in param if not par in mark_to_remove]
 
 
 class InputParameterInterface(Interface):
+    savereadingbysub = {}
+
     def __init__(self, bids_data, parameter_soft_input=None):
         self.bids_data = bids_data
         if parameter_soft_input:
@@ -308,18 +373,19 @@ class InputParameterInterface(Interface):
     def vars_interface(self):
         if self.parameters is not None:
             if self.parameters.deriv_input:
-                self['deriv-folder'] = dict()
-                self['deriv-folder']['attribut'] = 'Listbox'
+                self['DerivFolder'] = dict()
+                self['DerivFolder']['attribut'] = 'Listbox'
                 deriv_list = [elt for elt in os.listdir(os.path.join(self.bids_data.cwdir, 'derivatives'))if
-                                  elt not in ['log', 'parsing', 'parsing_old', 'log_old'] and os.path.isdir(os.path.join(self.bids_data.cwdir, 'derivatives',elt))]
-                self['deriv-folder']['value'] = deriv_list
+                                  elt not in ['log', 'parsing', 'parsing_old', 'log_old'] and
+                              os.path.isdir(os.path.join(self.bids_data.cwdir, 'derivatives',elt))]
+                self['DerivFolder']['value'] = deriv_list
             self['modality'] = dict()
-            if self.parameters['modality']:
-                if len(self.parameters['modality']) > 1:
+            if self.parameters['Modality']:
+                if len(self.parameters['Modality']) > 1:
                     self['modality']['attribut'] = 'Listbox'
-                    self['modality']['value'] = self.parameters['modality']
+                    self['modality']['value'] = self.parameters['Modality']
                 else:
-                    self['modality']['value'] = self.parameters['modality'][-1]
+                    self['modality']['value'] = self.parameters['Modality'][-1]
                     self['modality']['attribut'] = 'Label'
             else:
                 self['modality']['attribut'] = 'Listbox'
@@ -335,17 +401,19 @@ class InputParameterInterface(Interface):
             modality = self['modality']['value']
         if not self.parameters.deriv_input:
             for sub in self.bids_data['Subject']:
+                self.savereadingbysub[sub['sub']] = {}
                 for mod in sub:
                     if mod and mod in modality:
                         keys = [elt for elt in self.keylist if elt in eval('bids.' + mod + '.keylist') and elt != 'sub']
                         if mod in bids.Imaging.get_list_subclasses_names() and 'mod' not in keys:
                             keys.append('mod')
                         if sub[mod]:
-                            self.get_values(mod, keys, sub)
+                            self.get_values(mod, keys, sub, self.savereadingbysub[sub['sub']])
         else:
             for pip in self.bids_data['Derivatives'][0]['Pipeline']:
                 sub_list = [sub for sub in pip['SubjectProcess']]
                 for sub in sub_list:
+                    self.savereadingbysub[sub['sub']] = {}
                     for mod in sub:
                         if mod and mod.split('Process')[0] in modality:
                             keys = [elt for elt in self.keylist if
@@ -353,14 +421,14 @@ class InputParameterInterface(Interface):
                             if mod in bids.ImagingProcess.get_list_subclasses_names() and 'mod' not in keys:
                                 keys.append('mod')
                             if sub[mod]:
-                                self.get_values(mod, keys, sub)
+                                self.get_values(mod, keys, sub, self.savereadingbysub[sub['sub']])
         clefs = [key for key in self]
         for key in clefs:
             if self[key]['attribut'] == 'Label' and key not in ['modality', 'ses']:
                 del self[key]
         #Ecrire qqch si juste la modality en label et rien d'autre
 
-    def get_values(self, mod, keys, sub):
+    def get_values(self, mod, keys, sub, dict2update):
         for key in keys:
             value = [elt[key] for elt in sub[mod]]
             if key == 'mod':
@@ -376,6 +444,7 @@ class InputParameterInterface(Interface):
                 #         self[key]['value'].extend(value)
                 if key == 'ses' and '' in value:
                     value.remove('')
+                dict2update[key] = value
                 if not key in self:
                     self[key] = {}
                     self[key]['value'] = value

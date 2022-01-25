@@ -1,9 +1,10 @@
-# -*- coding: utf-8 -*-<
+# -*- coding: utf-8 -*-
 
-#     BIDS Manager collect, organise and manage data in BIDS format.
+#     BIDS Uploader collect, creates the data2import requires by BIDS Manager
+#     and transfer data if in sFTP mode.
 #     Copyright © 2018-2020 Aix-Marseille University, INSERM, INS
 #
-#     This file is part of BIDS Manager.
+#     This file is part of BIDS Uploader.
 #
 #     BIDS Manager is free software: you can redistribute it and/or modify
 #     it under the terms of the GNU General Public License as published by
@@ -22,6 +23,7 @@
 
 from PyQt5 import QtWidgets
 import os
+import platform
 from bids_manager import ins_bids_class
 from generic_uploader.meg_import_dialog import MegImportDialog
 from generic_uploader.anat_import_dialog import AnatImportDialog
@@ -48,7 +50,10 @@ def find_run_nb(subject_modality, items_list, bids_dataset):
         return run_nb + 1
     else:
         if not run_nb:
-            run, high_run = bids_dataset.get_number_of_runs(subject_modality[-1])
+            if bids_dataset is not None:
+                run, high_run = bids_dataset.get_number_of_runs(subject_modality[-1])
+            else:
+                high_run = 0
             # if not run:
             if not high_run:
                 run_nb = 0 + 1
@@ -59,37 +64,15 @@ def find_run_nb(subject_modality, items_list, bids_dataset):
 
 
 def import_by_modality(main_window, modality_class, modality_gui, subject):
+    open_file_options = dict()
+    if platform.system() == 'Linux':
+        open_file_options = {'options': QtWidgets.QFileDialog.DontUseNativeDialog}  # Known issue with PyQt5, extensions are case sensitive with native QFileDialog
     bids_dataset = main_window.bids_dataset
     key_list = [str(modality_gui.combobox_list[idx].objectName()) for idx in range(0, len(modality_gui.combobox_list))]
     keys_dict = {}
     for i in range(0, len(key_list)):
         key_list_value = str(modality_gui.combobox_list[i].currentText())
         keys_dict[key_list[i]] = key_list_value
-    # modality_idx = [idx for idx in range(0, len(modality_gui.combobox_list))
-    #                 if modality_gui.combobox_list[idx].objectName() == "modality"]
-    # if (modality_idx.__len__() == 1) and modality_idx:
-    #     modality = str(modality_gui.combobox_list[modality_idx[0]].currentText())
-    # else:
-    #     modality = ""
-    # session_idx = [idx for idx in range(0, len(modality_gui.combobox_list))
-    #                if modality_gui.combobox_list[idx].objectName() == "session"]
-    # if session_idx:
-    #     ses = str(modality_gui.combobox_list[session_idx[0]].currentText())
-    # else:
-    #     ses = ""
-    # acq_idx = [idx for idx in range(0, len(modality_gui.combobox_list))
-    #            if modality_gui.combobox_list[idx].objectName() == "acq"]
-    # if acq_idx:
-    #     acq = str(modality_gui.combobox_list[acq_idx[0]].currentText())
-    # else:
-    #     acq = ''
-    # task_idx = [idx for idx in range(0, len(modality_gui.combobox_list))
-    #             if modality_gui.combobox_list[idx].objectName() == "task"]
-    # if task_idx:
-    #     task = str(modality_gui.combobox_list[task_idx[0]].currentText())
-    # else:
-    #     task = ''
-    # if modality_class not in ["Ieeg", "Eeg", "IeegGlobalSidecars"]:
     if modality_class not in ins_bids_class.GlobalSidecars.get_list_subclasses_names():
         tmp_modality = getattr(ins_bids_class, modality_class)()
         if isinstance(tmp_modality, ins_bids_class.Imaging):
@@ -112,8 +95,6 @@ def import_by_modality(main_window, modality_class, modality_gui, subject):
             if imagery_folder == "":
                 return 0, 0
             subject[modality_class] = eval("ins_bids_class." + modality_class + "()")
-            '''subject[modality_class][-1].update({'sub': subject['sub'], 'ses': session, 'acq': acq,
-                                            'modality': modality, 'fileLoc': str(imagery_folder)})'''
             # test sam pour update generic
             subject[modality_class][-1].update({'sub': subject['sub'], 'fileLoc': str(imagery_folder)})
             items_list = [item for item in subject[modality_class][-1].keys() if item in key_list]
@@ -122,14 +103,13 @@ def import_by_modality(main_window, modality_class, modality_gui, subject):
             # gérer le run ici
             run_nb = find_run_nb(subject[modality_class], items_list, bids_dataset)
             subject[modality_class][-1].update({'run': str(run_nb)})
-    # elif modality_class in ["Ieeg", "Meg", "Eeg", "IeegGlobalSidecars"]:
         elif isinstance(tmp_modality, ins_bids_class.Electrophy):
         # files_type_allowed = "(*.trc *.eeg *.vhdr *.vmrk *.dat *.jpg *.png *.edf *.ctf *.fif)"
             files_type_allowed = tmp_modality.readable_file_formats
             extenstion_allowed = '*' + ' *'.join(files_type_allowed)
             if tmp_modality.classname() is not "Meg":
                 imported_name = QtWidgets.QFileDialog.getOpenFileNames(None, "Select one or more files",
-                                                               main_window.last_path, extenstion_allowed)
+                                                                       main_window.last_path, extenstion_allowed, **open_file_options)
                 # SEEG part
                 if not imported_name[0]:
                     return 0, 0
@@ -180,7 +160,7 @@ def import_by_modality(main_window, modality_class, modality_gui, subject):
                 else:
                     if meg_import_dialog.flag_import == "files":
                         imported_name = QtWidgets.QFileDialog.getOpenFileNames(None, "Select one or more files",
-                                                                           main_window.last_path, extenstion_allowed)
+                                                                           main_window.last_path, extenstion_allowed, **open_file_options)
                         main_window.last_path = os.path.dirname(str(imported_name[0]))
                         # car il peut y avoir plusieurs fichier !!
                         main_window.last_path = os.path.dirname(str(imported_name[0]))
@@ -253,7 +233,7 @@ def import_by_modality(main_window, modality_class, modality_gui, subject):
         #     files_type_allowed = getattr(ins_bids_class, modality_class).allowed_file_formats
         #     extenstion_allowed = '*' + ' *'.join(files_type_allowed)
         imported_name = QtWidgets.QFileDialog.getOpenFileNames(None, "Select one or more files",
-                                                           main_window.last_path, extenstion_allowed)
+                                                           main_window.last_path, extenstion_allowed, **open_file_options)
         imported_name = imported_name[0] # to manage pyqt5 and tuple from QtWidgets.openfile
         if not imported_name:
             return 0, 0

@@ -24,18 +24,22 @@
 #              Aude Jegou, 2019-2020
 
 import bids_manager.ins_bids_class as bids
-from bids_pipeline import pipeline_class as pip
+import bids_pipeline.pipeline_class as pip
 import bids_pipeline.interface_class as itf
+import bids_pipeline.export_merge as exp
 import os
 import json
 import platform
-from generic_uploader.generic_uploader import call_generic_uplader
+import webbrowser
+from generic_uploader.generic_uploader import call_generic_uploader
 from tkinter import ttk, Tk, Menu, messagebox, filedialog, Frame, Listbox, scrolledtext, Toplevel, \
     Label, Button, Entry, StringVar, BooleanVar, IntVar, DISABLED, NORMAL, END, W, N, E, BOTH, X, Y, RIGHT, LEFT,\
     TOP, BOTTOM, BROWSE, MULTIPLE, EXTENDED, ACTIVE, RIDGE, Scrollbar, CENTER, OptionMenu, Checkbutton, Radiobutton, GROOVE, \
-    Variable, Canvas, font
-from bids_pipeline.convert_process_file import write_big_table
-from ctypes import windll
+    Variable, Canvas, font, HORIZONTAL
+from bids_pipeline.convert_process_file import write_big_table, __reject_dir__
+from bids_manager.ins_anywave import handle_anywave_files, anywave_ext_analysis, anywave_ext
+if platform.system() == 'Windows': from ctypes import windll
+from datetime import datetime
 try:
     from importlib import reload
 except:
@@ -46,10 +50,11 @@ class BidsManager(Frame, object):  # !!!!!!!!!! object is used to make the class
     # (https://stackoverflow.com/questions/18171328/python-2-7-super-error) While it is true that Tkinter uses
     # old-style classes, this limitation can be overcome by additionally deriving the subclass Application from object
     # (using Python multiple inheritance) !!!!!!!!!
-    version = '0.2.8'
+    version = '0.3.4'
     bids_startfile = os.path.join(os.getcwd(), 'Data')
     import_startfile = os.path.join(os.getcwd(), 'Data')
     folder_software = os.path.join(os.getcwd(), 'SoftwarePipeline')
+    anywave_reverse = False
 
     def __init__(self, root, monitor_width, monitor_height):
         super().__init__()
@@ -85,6 +90,8 @@ class BidsManager(Frame, object):  # !!!!!!!!!! object is used to make the class
         self.pipeline_menu = pipeline_menu
         statistic_menu = Menu(menu_bar, tearoff=0)
         self.statistic_menu = statistic_menu
+        anywave_menu = Menu(menu_bar, tearoff=0)
+        self.anywave_menu = anywave_menu
         # fill up the bids menu
         bids_menu.add_command(label='Create new BIDS directory', command=lambda: self.ask4bidsdir(True))
         bids_menu.add_command(label='Set BIDS directory', command=self.ask4bidsdir)
@@ -115,23 +122,47 @@ class BidsManager(Frame, object):  # !!!!!!!!!! object is used to make the class
         about_menu.add_command(label='License', command=self.read_license)
         about_menu.add_command(label='How to cite the paper', command=self.cite_paper)
         # fill up the pipeline menu
-
+        pipeline_menu.add_command(label='Add Module', command=lambda: self.create_pipeline(), state=DISABLED)
+        pipeline_menu.add_command(label='Export/Merge BIDS dataset', command=lambda: self.manipulate_data(),
+                                  state=DISABLED)
+        pipeline_menu.add_command(label='Create processing pipeline', command=lambda nm='batch': self.run_analysis(nm),
+                                  state=DISABLED)
+        pipeline_menu.add_command(label='Upload processing pipeline file or analysis file', command=lambda: self.select_batch_file(),
+                                  state=DISABLED)
         with os.scandir(self.folder_software) as it:
             for entry in it:
                 name, ext = os.path.splitext(entry.name)
                 if ext == '.json':
                     pipeline_menu.add_command(label=name, command=lambda nm=name: self.run_analysis(nm), state=DISABLED)
-        pipeline_menu.add_command(label='Create processing batch', command=lambda nm='batch': self.run_analysis(nm), state=DISABLED)
-        pipeline_menu.add_command(label='Upload batch file or analysis file', command=lambda: self.select_batch_file(), state=DISABLED)
 
-        #sattistic menu
-        statistic_menu.add_command(label='Create statistic table', command= lambda: self.createtablestats(), state=DISABLED)
+        # fill up the sattistic menu
+        menu_statistic = Menu(bids_menu, tearoff=0)
+        menu_statistic.add_command(label='Ieeg', command=lambda nm='ieeg': self.create_table_stats(nm))
+        menu_statistic.add_command(label='eeg', command=lambda nm='eeg': self.create_table_stats(nm))
+        menu_statistic.add_command(label='meg', command=lambda nm='meg': self.create_table_stats(nm))
+        statistic_menu.add_cascade(label='Create statistic table', underline=0, menu=menu_statistic, state=DISABLED)
+
+        # fill up the anywave menu
+        anywave_menu.add_command(label='Download the last version', command=lambda url='https://meg.univ-amu.fr/wiki/AnyWave:Download', n=1, at=True: webbrowser.open(url, new=n, autoraise=at))
+        menu_anywave_copy = Menu(bids_menu, tearoff=0)
+        menu_anywave_copy.add_command(label='Copy files from derivatives/anywave/{}'.format(bids.BidsBrick.curr_user),
+                                 command=lambda nm=bids.BidsBrick.curr_user: self.handle_anywave(nm))
+        menu_anywave_copy.add_command(label='Copy files from derivatives/anywave/common',
+                                 command=lambda nm='common': self.handle_anywave(nm))
+        anywave_menu.add_cascade(label="For version before 03-2021", underline=0, menu=menu_anywave_copy,
+                              state=DISABLED)
+        anywave_menu.add_command(label='Copy files common -> {}'.format(bids.BidsBrick.curr_user), command=lambda nm='common', ToDeriv=True: self.handle_anywave(nm, ToDeriv),
+                                  state=DISABLED)
+        anywave_menu.add_command(label='Copy files {} -> common'.format(bids.BidsBrick.curr_user),
+                                 command=lambda nm=bids.BidsBrick.curr_user, ToDeriv=True: self.handle_anywave(nm, ToDeriv),
+                                  state=DISABLED)
 
         menu_bar.add_cascade(label="BIDS", underline=0, menu=bids_menu)
         menu_bar.add_cascade(label="Uploader", underline=0, menu=uploader_menu)
         menu_bar.add_cascade(label="Issues", underline=0, menu=issue_menu)
         menu_bar.add_cascade(label="Pipelines", underline=0, menu=pipeline_menu)
         menu_bar.add_cascade(label="Statistics", underline=0, menu=statistic_menu)
+        menu_bar.add_cascade(label='AnyWave', underline=0, menu=anywave_menu)
         menu_bar.add_cascade(label='About', underline=0, menu=about_menu)
 
         # area to print logs
@@ -152,11 +183,6 @@ class BidsManager(Frame, object):  # !!!!!!!!!! object is used to make the class
         # self.pack_element(self.main_frame['text'])
         # self.update_text('\n'.join(make_splash()))
 
-    # def launch_pipeline(self, idx):
-    #     pass
-    #     # self.pipeline_settings.propose_param(self.curr_bids, idx)
-    #     # self.curr_bids.write_log('Launching: ' + self.pipeline_settings['Settings'][idx]['label']
-    #     #  + '(to be set!!!!!)')
 
     def pack_element(self, element, side=None, remove_previous=True):
 
@@ -187,8 +213,8 @@ class BidsManager(Frame, object):  # !!!!!!!!!! object is used to make the class
         if flag:
             self.make_idle('Appling actions')
             self.curr_bids.apply_actions()
-            if self.upload_dir:
-                self.curr_data2import = bids.Data2Import(self.upload_dir)
+            # if self.upload_dir:
+            #     self.curr_data2import = bids.Data2Import(self.upload_dir)
             self.update_text(self.curr_bids.curr_log)
             self.pack_element(self.main_frame['text'])
             self.make_available()
@@ -196,9 +222,9 @@ class BidsManager(Frame, object):  # !!!!!!!!!! object is used to make the class
             flag_import = False
             upload_dir = [os.path.normpath(elt['path']) for elt in self.curr_bids.issues['UpldFldrIssue'] + self.curr_bids.issues['ImportIssue']]
             upload_dir = list(set(upload_dir))
-            if len(upload_dir) > 1 or (len(upload_dir) == 1 and os.path.normpath(self.upload_dir) != upload_dir[0]):
-                if self.upload_dir is not None and self.upload_dir not in upload_dir:
-                    upload_dir.append(self.upload_dir)
+            if len(upload_dir) > 1 or (self.upload_dir is not None and len(upload_dir) == 1 and os.path.normpath(self.upload_dir) != upload_dir[0]):
+                if self.upload_dir is not None and os.path.normpath(self.upload_dir) not in upload_dir:
+                    upload_dir.append(os.path.normpath(self.upload_dir))
                 self.upload_dir = None
                 small_win = SmallDialog(self, upload_dir, 'Do you want to import data?', 'Select the upload directory:')
                 if small_win.results:
@@ -211,6 +237,13 @@ class BidsManager(Frame, object):  # !!!!!!!!!! object is used to make the class
                 self.upload_dir = upload_dir[0]
             if flag_import:
                 self.curr_data2import = bids.Data2Import(self.upload_dir)
+                if self.curr_data2import.is_empty():
+                    log_import = 10 * '=' + '\n' + 'There is no file to import in ' + self.upload_dir + \
+                                ' (you should manually remove this folder).\n'
+                    self.upload_dir = None
+                    self.curr_data2import = None
+                    self.update_text(log_import, delete_flag=False)
+                    return
                 self.import_data()
 
     def delete_actions(self):
@@ -241,7 +274,8 @@ class BidsManager(Frame, object):  # !!!!!!!!!! object is used to make the class
                                                        self.curr_data2import.classname() + '.\nAre you sure?'):
             self.curr_data2import.save_as_json()
             if self.curr_data2import.is_empty():
-                self.update_text('There is no file to import in ' + self.upload_dir)
+                self.update_text(10 * '=' + '\n' + 'There is no file to import in ' + self.upload_dir +
+                                 ' (you should manually remove this folder).\n')
                 self.upload_dir = None
                 self.curr_data2import = None
             else:
@@ -259,6 +293,12 @@ class BidsManager(Frame, object):  # !!!!!!!!!! object is used to make the class
             self.pack_element(self.main_frame['text'])
 
     def refresh(self):
+        permission = self.curr_bids.access[bids.BidsBrick.curr_user]['permission']
+        if permission == 'read':
+            str2write = '/!\\ WARNING /!\\ User {} don"t have the permission to write in BIDS dataset {} so he cannot refresh the dataset.\n'.format(bids.BidsBrick.curr_user, self.curr_bids.dirname)
+            self.update_text(str2write)
+            self.make_available()
+            return
         self.pack_element(self.main_frame['text'])
         self.make_idle('Parsing BIDS directory.')
         self.curr_bids._assign_bids_dir(self.curr_bids.dirname)
@@ -350,14 +390,19 @@ class BidsManager(Frame, object):  # !!!!!!!!!! object is used to make the class
 
             return error_str
 
-
-        def check_access():
-            if os.path.isfile(self.curr_bids.access.filename):
-                acss = bids.Access()
-                acss.read_file(self.curr_bids.access.filename)
-            else:
-                acss = False
+        def check_access(user):
+            try:
                 self.curr_bids.access.write_file()
+            except:
+                self.update_text("You don't have the permissions to write in the BIDS dataset {} and its derivatives.\n".format(self.curr_bids.cwdir))
+            acss = self.curr_bids.access
+            # acss = [us for us in self.curr_bids.access if not us == user]
+            # if os.path.isfile(self.curr_bids.access.filename):
+            #     acss = bids.Access()
+            #     acss.read_file(self.curr_bids.access.filename)
+            # else:
+            #     acss = False
+            #     self.curr_bids.access.write_file()
             return acss
 
         bids_dir = filedialog.askdirectory(title='Please select a BIDS dataset directory',
@@ -370,8 +415,9 @@ class BidsManager(Frame, object):  # !!!!!!!!!! object is used to make the class
         self.upload_dir = None
         self.curr_data2import = None
         self.update_text('')
+        is_used = False
         if self.curr_bids:
-            self.curr_bids.access.delete_file()
+            self.curr_bids.access.delete_file(bids.BidsBrick.curr_user)
             self.curr_bids = None
         if isnew_dir:
             # if new bids directory than create dataset_desc.json and but the requirements in code
@@ -398,15 +444,18 @@ class BidsManager(Frame, object):  # !!!!!!!!!! object is used to make the class
                     self.change_menu_state(self.issue_menu, state=DISABLED)
                     self.make_available()
                     return
-                access = check_access()
+                access = check_access(bids.BidsBrick.curr_user)
                 if access:
-                    messagebox.showerror('Error', access.display())
-                    self.banner_label._default = 'Please set/create a Bids directory'
-                    self.curr_bids = None
-                    self.change_menu_state(self.uploader_menu, state=DISABLED)
-                    self.change_menu_state(self.issue_menu, state=DISABLED)
-                    self.make_available()
-                    return
+                    wn = access.display()
+                    if wn:
+                        is_used=True
+                        messagebox.showwarning('WARNING', wn)
+                    # self.banner_label._default = 'Please set/create a Bids directory'
+                    # self.curr_bids = None
+                    # self.change_menu_state(self.uploader_menu, state=DISABLED)
+                    # self.change_menu_state(self.issue_menu, state=DISABLED)
+                    # self.make_available()
+                    # return
 
             else:
                 self.change_menu_state(self.uploader_menu, state=DISABLED)
@@ -416,6 +465,19 @@ class BidsManager(Frame, object):  # !!!!!!!!!! object is used to make the class
                 return
 
         self.curr_bids.get_requirements()
+        if not is_used:
+            # Check if there is anywave files
+            flag = messagebox.askyesno('INFO',
+                                       'If AnyWave files(.mtg, .mrk, .bad,etc) exist in BIDS dataset, they will be moved in derivatives/anywave/{}.\n'
+                                       'if those files already exists in your folder, do you want to overwrite them with the ones coming from BIDS dataset?\n'
+                                       '(If you click on NO, the files will be deleted)'.format(
+                                           bids.BidsBrick.curr_user))
+            overwrite = False
+            if flag:
+                overwrite = True
+            log = handle_anywave_files(self.curr_bids.dirname, self.curr_bids.access, self.curr_bids.curr_user, reverse=False, overwrite=overwrite)
+            if log:
+                self.update_text(log)
         # enable all bids sub-menu
         self.change_menu_state(self.bids_menu)
         self.change_menu_state(self.pipeline_menu)
@@ -428,6 +490,7 @@ class BidsManager(Frame, object):  # !!!!!!!!!! object is used to make the class
         # enalbe all pipelines
         self.change_menu_state(self.pipeline_menu)
         self.change_menu_state(self.statistic_menu)
+        self.change_menu_state(self.anywave_menu)
         # self.update_text(self.curr_bids.curr_log)
         self.make_available()
 
@@ -449,7 +512,8 @@ class BidsManager(Frame, object):  # !!!!!!!!!! object is used to make the class
                 req_path = os.path.join(self.curr_bids.dirname, 'code', 'requirements.json')
                 self.curr_data2import = bids.Data2Import(self.upload_dir, req_path)
                 if self.curr_data2import.is_empty():
-                    self.update_text('There is no file to import in ' + self.upload_dir)
+                    self.update_text(10 * '=' + '\n' + 'There is no file to import in ' + self.upload_dir +
+                                     ' (you should manually remove this folder).\n')
                     self.upload_dir = None
                     self.curr_data2import = None
                 else:
@@ -542,8 +606,8 @@ class BidsManager(Frame, object):  # !!!!!!!!!! object is used to make the class
             info['IsAction'] = True
             self.update_issue_list(curr_dict, list_idx, info)
 
-    def select_correct_name(self, list_idx, info):
-
+    def select_correct_name(self, list_idx, line_map): #info
+        info = line_map[list_idx]
         idx = info['index']
         mismtch_elec = info['Element']
         curr_dict = self.curr_bids.issues['ElectrodeIssue'][idx]
@@ -552,8 +616,26 @@ class BidsManager(Frame, object):  # !!!!!!!!!! object is used to make the class
             make_cmd4elecnamechg(results, curr_dict, mismtch_elec)
             info['IsAction'] = True
             self.update_issue_list(curr_dict, list_idx, info)
+            flag = messagebox.askyesno('Apply change to other issues', 'Do you want to rename electrode {} in {} on the other files?'.format(mismtch_elec, results))
+            if flag:
+                filename = os.path.basename(curr_dict['fileLoc'])
+                names = filename.split('_')
+                common_name = '_'.join(names[0:3])
+                # common_issues = [(iss, cnt) for cnt, iss in enumerate(self.curr_bids.issues['ElectrodeIssue']) if iss['MismatchedElectrodes'] == curr_dict['MismatchedElectrodes'] and common_name in iss['fileLoc'] and not iss['fileLoc'] == curr_dict['fileLoc']]
+                common_issues = [(iss, cnt) for cnt, iss in enumerate(self.curr_bids.issues['ElectrodeIssue']) for elt
+                                 in iss['MismatchedElectrodes'] if
+                                 mismtch_elec == elt['name'] and common_name in
+                                 iss['fileLoc'] and not iss['fileLoc'] == curr_dict['fileLoc']]
+                for iss in common_issues:
+                    make_cmd4elecnamechg(results, iss[0], mismtch_elec)
+                    list_idx_other = [cnt for cnt, elt in enumerate(line_map) if
+                                      elt['index'] == iss[1] and elt['Element'] == mismtch_elec]
+                    info = line_map[list_idx_other[0]]
+                    info['IsAction'] = True
+                    self.update_issue_list(iss[0], list_idx_other[0], info)
 
-    def change_elec_type(self, list_idx, info):
+    def change_elec_type(self, list_idx, line_map):
+        info = line_map[list_idx]
         idx = info['index']
         mismtch_elec = info['Element']
 
@@ -576,6 +658,29 @@ class BidsManager(Frame, object):  # !!!!!!!!!! object is used to make the class
             make_cmd4electypechg(output_dict, input_dict, curr_dict, mismtch_elec)
             info['IsAction'] = True
             self.update_issue_list(curr_dict, list_idx, info)
+            flag = messagebox.askyesno('Apply change to other issues', 'Do you want to change the type {} in {} on the other files with the electrode mismatch {}?'.format(input_dict, output_dict, mismtch_elec))
+            if flag:
+                filename = os.path.basename(curr_dict['fileLoc'])
+                names = filename.split('_')
+                common_name = '_'.join(names[0:3])
+                common_issues = [(iss, cnt) for cnt, iss in enumerate(self.curr_bids.issues['ElectrodeIssue']) for elt in iss['MismatchedElectrodes'] if
+                                 mismtch_elec == elt['name'] and common_name in
+                                 #iss['MismatchedElectrodes'] == curr_dict['MismatchedElectrodes'] and common_name in
+                                 iss['fileLoc'] and not iss['fileLoc'] == curr_dict['fileLoc']]
+                for iss in common_issues:
+                    str_info = 'Change electrode type of ' + mismtch_elec + ' from ' + input_dict['type'] + ' to ' + \
+                               output_dict['type'] + ' in the electrode file related to ' + \
+                               os.path.basename(iss[0]['fileLoc']) + '.\n'
+                    # self.pack_element(self.main_frame['text'], side=LEFT, remove_previous=False)
+                    # to fancy, used for others
+                    # command = ', '.join([str(k + '="' + output_dict[k] + '"') for k in output_dict])
+                    list_idx_other = [cnt for cnt, elt in enumerate(line_map) if elt['index'] == iss[1] and elt['Element'] == mismtch_elec]
+                    command = 'type="' + output_dict['type'] + '"'
+                    iss[0].add_action(str_info, command, elec_name=mismtch_elec)
+                    make_cmd4electypechg(output_dict, input_dict, iss[0], mismtch_elec)
+                    info = line_map[list_idx_other[0]]
+                    info['IsAction'] = True
+                    self.update_issue_list(iss[0], list_idx_other[0], info)
 
     def get_entry(self, issue_key, list_idx, info):
         idx = info['index']
@@ -638,7 +743,7 @@ class BidsManager(Frame, object):  # !!!!!!!!!! object is used to make the class
 
     def solve_issues(self, issue_key):
 
-        def what2domenu(iss_key, dlb_lst, line_map, event, deriv_issue=None):
+        def what2domenu(iss_key, dlb_lst, line_map, event, source_issue=False, deriv_issue=None):
 
             if not dlb_lst.elements['list1'].curselection():
                 return
@@ -650,9 +755,9 @@ class BidsManager(Frame, object):  # !!!!!!!!!! object is used to make the class
                 pop_menu.add_command(label='Open file',
                                      command=lambda: self.open_file(issue_key, curr_idx, line_map[curr_idx]))
                 pop_menu.add_command(label='Change electrode name',
-                                     command=lambda: self.select_correct_name(curr_idx, line_map[curr_idx]))
+                                     command=lambda: self.select_correct_name(curr_idx, line_map))
                 pop_menu.add_command(label='Change electrode type',
-                                     command=lambda: self.change_elec_type(curr_idx, line_map[curr_idx]))
+                                     command=lambda: self.change_elec_type(curr_idx, line_map))
             elif iss_key == 'ValidatorIssue':
                 pop_menu.add_command(label='Open file',
                                      command=lambda: self.open_file(issue_key, curr_idx, line_map[curr_idx]))
@@ -687,12 +792,17 @@ class BidsManager(Frame, object):  # !!!!!!!!!! object is used to make the class
                          file that will be imported"""
                         pop_menu.add_command(label='Open file',
                                              command=lambda: self.open_file(issue_key, curr_idx, line_map[curr_idx]))
-                        pop_menu.add_command(label='Change modality attributes',
-                                             command=lambda: self.modify_attributes(issue_key, curr_idx,
-                                                                                    line_map[curr_idx], in_bids=False, deriv_folder=deriv_issue))
+                        if not source_issue:
+                            pop_menu.add_command(label='Change modality attributes',
+                                                 command=lambda: self.modify_attributes(issue_key, curr_idx,
+                                                                                        line_map[curr_idx],
+                                                                                        in_bids=False,
+                                                                                        deriv_folder=deriv_issue))
                         if iss_key == 'ImportIssue':
-                            pop_menu.add_command(label='Remove file in BIDS',
-                                                 command=lambda: self.remove_file(curr_idx, line_map[curr_idx], deriv_folder=deriv_issue))
+                            if not source_issue:
+                                pop_menu.add_command(label='Remove file in BIDS',
+                                                     command=lambda: self.remove_file(curr_idx, line_map[curr_idx],
+                                                                                      deriv_folder=deriv_issue))
                         else:
                             idx = line_map[curr_idx]['index']
                             curr_dict = self.curr_bids.issues['UpldFldrIssue'][idx]
@@ -704,12 +814,13 @@ class BidsManager(Frame, object):  # !!!!!!!!!! object is used to make the class
                                                      command=lambda: self.mark_as_verified(curr_idx, line_map[curr_idx],
                                                                                            state_str))
 
-                    pop_menu.add_command(label='Do not import',
-                                         command=lambda: self.do_not_import(issue_key, curr_idx, line_map[curr_idx], deriv_folder=deriv_issue))
-                    # in case you wrongly chose a folder
-                    pop_menu.add_command(label='Remove issue',
-                                         command=lambda: self.remove_issue(issue_key, curr_idx,
-                                                                           line_map[curr_idx]))
+                        pop_menu.add_command(label='Do not import',
+                                             command=lambda: self.do_not_import(issue_key, curr_idx, line_map[curr_idx],
+                                                                                deriv_folder=deriv_issue))
+            # in case you wrongly chose a folder
+            pop_menu.add_command(label='Remove issue',
+                                 command=lambda: self.remove_issue(issue_key, curr_idx,
+                                                                   line_map[curr_idx]))
 
             pop_menu.add_command(label='Read or add comment',
                                  command=lambda: self.get_entry(issue_key, curr_idx, line_map[curr_idx]))
@@ -722,6 +833,7 @@ class BidsManager(Frame, object):  # !!!!!!!!!! object is used to make the class
         self.pack_element(dlb_list)
 
         deriv_issue = None
+        source_issue = False
         issue_dict = self.curr_bids.issues[issue_key]
         issue_list2write = []
         action_list2write = []
@@ -761,6 +873,8 @@ class BidsManager(Frame, object):  # !!!!!!!!!! object is used to make the class
                     issue_list2write.append(issue['description'])
                     if issue['description'].startswith('Derivatives folder'):
                         deriv_issue = issue['description'].split(' ')[2]
+                    elif 'source' in issue['description']:
+                        source_issue = True
                 else:
                     issue_list2write.append('sub-' + issue['sub'] + ' : ' + os.path.basename(issue['path']) + ' : ' + os.path.basename(issue['fileLoc']) + ' file is ' + issue['state'])
                     #issue_list2write.append('File: ' + os.path.basename(issue['fileLoc']) + ' is ' + issue['state'])
@@ -801,11 +915,16 @@ class BidsManager(Frame, object):  # !!!!!!!!!! object is used to make the class
         self.populate_list(dlb_list.elements['list2'], action_list2write)
         self.banner_label.set(self.banner_label._default + '\nSelect issue from the ' + label_str + ' list')
         dlb_list.elements['list1'].bind('<Double-Button-1>',
-                                        lambda event: what2domenu(issue_key, dlb_list, line_mapping, event, deriv_issue))
-        dlb_list.elements['list1'].bind('<Return>', lambda event: what2domenu(issue_key, dlb_list, line_mapping, event, deriv_issue))
+                                        lambda event: what2domenu(issue_key, dlb_list, line_mapping, event, source_issue, deriv_issue))
+        dlb_list.elements['list1'].bind('<Return>', lambda event: what2domenu(issue_key, dlb_list, line_mapping, event, source_issue, deriv_issue))
 
     def import_data(self):
         self.pack_element(self.main_frame['text'])
+        perm, users, log_info = self.curr_bids.access.use_token_import(self.curr_bids.curr_user)
+        if not perm:
+            messagebox.showerror('Import data not possible', log_info)
+            self.update_text(log_info)
+            return
         self.make_idle('Importing data from ' + self.curr_data2import.dirname)
         try:
             if self.curr_data2import:
@@ -814,6 +933,7 @@ class BidsManager(Frame, object):  # !!!!!!!!!! object is used to make the class
             else:
                 self.update_text('No upload directory is set.')
         except Exception as err:
+            self.curr_bids.access.free_token('import_data', self.curr_bids.curr_user)
             self.update_text(self.curr_bids.curr_log + str(err))
         if not os.path.exists(self.curr_data2import.dirname):
             self.curr_data2import = None
@@ -831,14 +951,73 @@ class BidsManager(Frame, object):  # !!!!!!!!!! object is used to make the class
                 self.change_menu_state(self.uploader_menu, start_idx=3, state=DISABLED)
             else:
                 self.update_text('Verify your upload directory {}.'.format(self.curr_data2import.dirname), delete_flag=False)
+        self.curr_bids.access.free_token('import_data', self.curr_bids.curr_user)
+        self.make_available()
+
+    def handle_anywave(self, folder, ToDeriv=False):
+        permission = self.curr_bids.access[self.curr_bids.curr_user]['permission']
+        if permission == 'read' and not ToDeriv:
+            messagebox.showwarning('WARNING', 'You don"t have the permission to copy anywave files in BIDS dataset !!!')
+            return
+        if not ToDeriv:
+            log = handle_anywave_files(self.curr_bids.dirname, self.curr_bids.access, folder, reverse=True)
+            self.anywave_reverse = True
+        else:
+            # Create the PipelineSetting for the GUI
+            select_types = pip.PipelineSetting(self.curr_bids)
+            select_types.jsonfilename = 'Files2Copy'
+            select_types['Name'] = 'Files_to_copy'
+            select_types['Parameters']['Input'] = []
+            select_types['Parameters']['Files_type'] = pip.Arguments()
+            select_types['Parameters']['Files_type'].copy_values({'PossibleValue': anywave_ext, 'MultipleSelection': True})
+            mod_list = [elt.lower() for elt in bids.Electrophy.get_list_subclasses_names()]
+            select_types['Parameters']['Modality'] = pip.Arguments()
+            select_types['Parameters']['Modality'].copy_values({'PossibleValue': mod_list, 'MultipleSelection': True})
+            output_dict = BidsSelectDialog(self, self.curr_bids, analysis_dict=select_types)
+            if folder == 'common':
+                dirname_dest = os.path.join(self.curr_bids.dirname, 'derivatives', 'anywave', self.curr_bids.curr_user)
+            else:
+                dirname_dest = os.path.join(self.curr_bids.dirname, 'derivatives', 'anywave', 'common')
+            #self.results = {key: {'input_param': {}, 'analysis_param': {}, 'subject_selected': [], 'derivatives_output': '', 'local_output':''} for key in self.parameter_list}
+            if output_dict.results:
+                sublist = output_dict.results['0_Files2Copy']['subject_selected']
+                mod = output_dict.results['0_Files2Copy']['analysis_param']['Modality']
+                files_type = output_dict.results['0_Files2Copy']['analysis_param']['Files_type']
+                flag = messagebox.askyesno('INFO', 'The files in {} will be overwrite by the one coming from {}.\n'
+                                                   'Do you want to continue?'.format(dirname_dest, folder))
+                if flag:
+                    self.make_idle('Copying AnyWave files from {} to {} in process'.format(folder, dirname_dest))
+                    log = handle_anywave_files(self.curr_bids.dirname, self.curr_bids.access, folder, reverse=False, sublist=sublist, overwrite=True, dirname_dest=dirname_dest,
+                                     files_type=files_type, modality=mod)
+            else:
+                log = 'The action to copy AnyWave files has been cancelled.\n'
+        if log:
+            self.update_text(log)
         self.make_available()
 
     def close_window(self):
         if self.curr_bids:
-            self.curr_bids.access.delete_file()
+            if self.anywave_reverse:
+                flag = messagebox.askyesno('INFO',
+                                           'If AnyWave files(.mtg, .mrk, .bad,etc) exist in BIDS dataset, they will be moved in derivatives/anywave/{}.\n'
+                                           'if those files already exists in your folder, do you want to overwrite them with the ones coming from BIDS dataset?\n'
+                                           '(If you click on NO, the files will be deleted)'.format(bids.BidsBrick.curr_user))
+                overwrite = False
+                if flag:
+                    overwrite = True
+                log = handle_anywave_files(bids.BidsDataset.dirname, self.curr_bids.access, bids.BidsBrick.curr_user, reverse=False, overwrite=overwrite)
+                if log:
+                    self.update_text(log)
+            #do a parsing before to close
+            flag = messagebox.askyesno('Info', 'Do you want to Refresh your dataset before to close?')
+            if flag:
+                self.make_idle('Parsing in process! Can take few minutes')
+                self.curr_bids.parse_bids()
+            self.curr_bids.access.delete_file(bids.BidsBrick.curr_user)
             # if not os.path.isfile(os.path.join(self.curr_bids.dirname, self.curr_bids.log_path,
             #                                    'bids_' + self.curr_bids.access["access_time"] + '.log')):
             #     self.curr_bids.write_log(self.curr_bids.curr_log)
+            self.make_available()
             self.curr_bids.write_log('BIDS Manager was closed')
             self.curr_bids.save_as_json()
         self.quit()
@@ -849,9 +1028,11 @@ class BidsManager(Frame, object):  # !!!!!!!!!! object is used to make the class
             str2print = ''
         else:
             str2print = '\n' + str2print
-        self.root.config(cursor="wait")
+        if platform.system() == 'Windows': self.root.config(cursor="wait")
+        if platform.system() == 'Linux': self.root.config(cursor="watch")
         for key in self.main_frame:
-            self.main_frame[key].config(cursor="wait")
+            if platform.system() == 'Windows': self.main_frame[key].config(cursor="wait")
+            if platform.system() == 'Linux': self.main_frame[key].config(cursor="watch")
         self.banner.configure(bg="red")
         self.banner_label.set(self.banner_label._default + str2print)
         self.update()
@@ -878,10 +1059,10 @@ class BidsManager(Frame, object):  # !!!!!!!!!! object is used to make the class
             else:
                 messagebox.showinfo('BIDS Uploader', 'BIDS Uploader cannot be ran')
                 return
-        #Run the BIDS Uploader
+        # Run BIDS Uploader
         self.make_idle('BIDS Uploader is running')
         try:
-            call_generic_uplader(self.curr_bids)
+            call_generic_uploader(self.curr_bids)
             self.update()
         except:
             self.update_text('BIDS uploader crashed')
@@ -890,44 +1071,54 @@ class BidsManager(Frame, object):  # !!!!!!!!!! object is used to make the class
         #dirname = os.path.dirname(self.curr_bids.dirname)
         self.upload_dir = os.path.join(self.curr_bids.dirname, 'derivatives', 'bids_uploader', 'TempFolder4Upload')
         if not os.path.exists(self.upload_dir):
-            self.update_text('The importation has been cancel because there is no data to import.')
+            self.update_text('The importation has been cancel because the output directory of BIDS Uploader doesn"t exist.')
             self.make_available()
             return
         self.make_idle('Data are ready to be imported.')
         if not os.listdir(self.upload_dir):
-            self.update_text('There is nothing to import.')
+            log_import = 'There is no upload directory in the output directory of BIDS Uploader named "TempFolder4Upload".\n'
         elif os.path.isfile(os.path.join(self.upload_dir, bids.Data2Import.filename)):
-            is_ready = self.verify_data2import(self.upload_dir)
+            is_ready, log_error = self.verify_data2import(self.upload_dir)
             if is_ready:
                 self.curr_bids.import_data(self.curr_data2import)
                 self.curr_data2import = None
+            log_import = log_error + '\n'
         else:
-            data_imported = 0
+            log_import = ''
             with os.scandir(self.upload_dir) as it:
                 for entry in it:
                     if entry.is_dir() and self.curr_bids['DatasetDescJSON']['Name'] in entry.name:
                         if os.path.isfile(os.path.join(entry.path, bids.Data2Import.filename)):
-                            is_ready = self.verify_data2import(entry.path)
+                            is_ready, log_error = self.verify_data2import(entry.path)
                             if is_ready:
                                 self.curr_bids.import_data(self.curr_data2import)
                                 self.curr_data2import = None
-                                data_imported += 1
-            if data_imported == 0:
-                self.update_text('There is nothing to import.')
+                            log_import += log_error
+        self.update_text(log_import, delete_flag=False)
         self.make_available()
 
     def verify_data2import(self, upload_dir):
+        log_error = ''
         is_ready = False
         req_path = os.path.join(self.curr_bids.dirname, 'code', 'requirements.json')
-        self.curr_data2import = bids.Data2Import(upload_dir, req_path)
-        if self.curr_data2import.is_empty():
-            self.update_text('There is no file to import in ' + upload_dir)
-            self.upload_dir = None
-            self.curr_data2import = None
-        else:
-            self.curr_bids.make_upload_issues(self.curr_data2import, force_verif=True)
-            is_ready = True
-        return is_ready
+        try:
+            self.curr_data2import = bids.Data2Import(upload_dir, req_path)
+            if self.curr_data2import.is_empty():
+                log_error = 10*'=' + '\n' + 'There is no file to import in ' + upload_dir + \
+                            ' (you should manually remove this folder).\n'
+                self.upload_dir = None
+                self.curr_data2import = None
+            elif not self.curr_data2import['DatasetDescJSON']['Name'] == self.curr_bids['DatasetDescJSON']['Name']:
+                #log_error = 'The upload directory {} doesn"t have the same protocol name of your BIDS dataset so it won"t be import.'.format(upload_dir)
+                self.upload_dir = None
+                self.curr_data2import = None
+            else:
+                self.curr_bids.make_upload_issues(self.curr_data2import, force_verif=True)
+                is_ready = True
+        except Exception as err:
+            is_ready = False
+            log_error += 'The upload directory {0} has not been imported because {1}.\n'.format(upload_dir, str(err))
+        return is_ready, log_error
 
     def modify_requirements_file(self):
         if self.curr_bids:
@@ -967,8 +1158,10 @@ class BidsManager(Frame, object):  # !!!!!!!!!! object is used to make the class
                         sub[mod+stemp] = eval('bids.'+mod+stemp+'()')
                     pip['SubjectProcess'].append(sub)
                     data2import['Derivatives'][-1]['Pipeline'].append(pip)
-            data2import.save_as_json()
-            self.update_text('The data2import template has been created.\n')
+                data2import.save_as_json()
+                self.update_text('The data2import template has been created.\n')
+            else:
+                self.update_text('The data2import template creation has been cancelled.\n')
 
     def read_license(self):
         notice_license = 'BIDS Manager  Copyright (C) 2018-2020  Aix-Marseille University, INSERM, INS.\n' \
@@ -983,7 +1176,7 @@ class BidsManager(Frame, object):  # !!!!!!!!!! object is used to make the class
     def cite_paper(self):
         citation = 'Roehri, N., Medina-Villalon, S., Jegou, A., Colombet, B., Giusiano, B., Ponz, A., & Bénar, C. G. (2020)\n' \
                    'Transfer , collection and organisation of electrophysiological and imaging data for multicenter studies.\n'\
-                    '(submitted)'
+                    'Neuroinformatics. 2021 Feb 10. doi: 10.1007/s12021-020-09503-6.\n'
         messagebox.showinfo('Citation', citation)
 
     def run_analysis(self, nameS, batch_file=None):
@@ -998,27 +1191,43 @@ class BidsManager(Frame, object):  # !!!!!!!!!! object is used to make the class
             # self.update_text('Subjects selected \n' + '\n'.join(
             #     output_dict.results[nameS]['subject_selected']) + '\nThe analysis is ready to be run')
             self.make_idle('Analysis in process')
-            last_out = {i: '' for i, key in enumerate(output_dict.results)}
+            last_out = {i: {'outname':'', 'log':''} for i, key in enumerate(output_dict.results)}
             batch_file = {key: {} for key in output_dict.results}
             for ind, key in enumerate(output_dict.results):
-                soft_analyse = pip.PipelineSetting(self.curr_bids, key)
+                tmp = key.split('_')
+                soft_name = '_'.join(tmp[1::])
+                perm, users, log_info = self.curr_bids.access.use_token_analyse(bids.BidsBrick.curr_user, soft_name)
+                if not perm:
+                    messagebox.showinfo('Batch analysed is stopped', log_info + '\n Batch stopped before to analyse {}.'.format(soft_name))
+                    self.curr_bids.access.free_token('analyse_data', bids.BidsBrick.curr_user)
+                    pip.save_batch(self.curr_bids.dirname, batch_file)
+                    self.make_available()
+                    return
+                soft_analyse = pip.PipelineSetting(self.curr_bids, soft_name)
                 for clef in output_dict.results[key]['input_param']:
-                    if 'deriv-folder' in output_dict.results[key]['input_param'][clef] and 'Previous analysis results' in output_dict.results[key]['input_param'][clef]['deriv-folder'][0]:
-                        idx_prev = int(output_dict.results[key]['input_param'][clef]['deriv-folder'][0].split('-')[0]) - 1
-                        if idx_prev in last_out and last_out[idx_prev] != '':
-                            output_dict.results[key]['input_param'][clef]['deriv-folder'][0] = last_out[idx_prev]
+                    if 'DerivFolder' in output_dict.results[key]['input_param'][clef] and 'Previous analysis results' in output_dict.results[key]['input_param'][clef]['DerivFolder'][0]:
+                        idx_prev = int(output_dict.results[key]['input_param'][clef]['DerivFolder'][0].split('-')[0]) - 1
+                        if idx_prev in last_out and last_out[idx_prev]['outname'] != '' and ('Error' or 'error' not in last_out[idx_prev]['log']):
+                            output_dict.results[key]['input_param'][clef]['DerivFolder'][0] = last_out[idx_prev]['outname']
                         else:
                             messagebox.showerror('Selection error', 'There is no analysis before {}.\n'.format(key))
                             output_dict = BidsSelectDialog(self, self.curr_bids, analysis_dict=nameS)
                             # remettre le batch
+                            self.curr_bids.access.free_token('analyse_data', bids.BidsBrick.curr_user)
                             self.make_available()
                             return
                 log_analysis, output_name, batch_file_soft = soft_analyse.set_everything_for_analysis(output_dict.results[key])
                 self.curr_bids.write_log('{} analysis:\n'.format(key) + log_analysis)
-                last_out[ind] = output_name
+                last_out[ind]['outname'] = output_name # last_out[ind]['log'] = log_analysis
                 batch_file[key] = batch_file_soft
             pip.save_batch(self.curr_bids.dirname, batch_file)
         else:
+            perm, users, log_info = self.curr_bids.access.use_token_analyse(bids.BidsBrick.curr_user, nameS)
+            if not perm:
+                messagebox.showwarning('WARNING', log_info)
+                self.curr_bids.access.free_token('analyse_data', bids.BidsBrick.curr_user)
+                self.make_available()
+                return
             try:
                 soft_analyse = pip.PipelineSetting(self.curr_bids, nameS)
             except (EOFError, KeyError) as err:
@@ -1035,11 +1244,12 @@ class BidsManager(Frame, object):  # !!!!!!!!!! object is used to make the class
                 # verify modality is present with one value
             clef = [key for key in output_dict.results][0]
             #add the parameters
-            self.update_text('Subjects selected \n' + '\n'.join(output_dict.results[clef]['subject_selected']) + '\nThe analysis is ready to be run')
+            self.update_text('Subjects selected \n' + '\n'.join(output_dict.results[clef]['subject_selected']) + '\nThe analysis is ready to be run', delete_flag=True)
             self.make_idle('Analysis in process')
             log_analysis, output_name, batch_file_soft = soft_analyse.set_everything_for_analysis(output_dict.results[clef]) #['analysis_param'], output_dict.results['subject_selected'], output_dict.reults['input_param']
             #self.update_text(log_analysis)
             self.curr_bids.write_log(log_analysis)
+        self.curr_bids.access.free_token('analyse_data', bids.BidsBrick.curr_user)
         self.make_available()
 
     def select_batch_file(self):
@@ -1062,23 +1272,22 @@ class BidsManager(Frame, object):  # !!!!!!!!!! object is used to make the class
             self.update_text('Subjects corresponding to the selection are:\n' + '\n'.join(
             output_dict.results['subject_selected']))
 
-    def createtablestats(self):
+    def create_table_stats(self, mod):
         self.make_idle('Create your statistical table')
         select_list = None
         deriv_dir = os.path.join(self.curr_bids.dirname, 'derivatives')
-        reject_dir = ['parsing', 'log', 'parsing_old', 'log_old', 'bids_pipeline']
         deriv_list = [entry for entry in os.listdir(deriv_dir) if
-                           not os.path.isfile(os.path.join(deriv_dir, entry)) and not entry in reject_dir]
-        multi_soft = [fold.split('-')[0] for fold in deriv_list if '-v' in fold]
-        multi_soft = list(set(multi_soft))
-        if multi_soft:
-            select_list = HandleMultipleSameProcess(self, deriv_list, multi_soft).results
-            if isinstance(select_list, str):
-                self.update_text(select_list)
-                self.make_available()
-                return
+                           not os.path.isfile(os.path.join(deriv_dir, entry)) and not entry in __reject_dir__]
+        # multi_soft = [fold.split('-')[0] for fold in deriv_list if '-v' in fold]
+        # multi_soft = list(set(multi_soft))
+        # if multi_soft:
+        select_list = HandleMultipleSameProcess(self, deriv_list).results
+        if isinstance(select_list, str):
+            self.update_text(select_list)
+            self.make_available()
+            return
         try:
-            log_error = write_big_table(deriv_dir, select_list)
+            log_error = write_big_table(deriv_dir, select_list, modality=mod)
             if log_error:
                 self.update_text(log_error)
             else:
@@ -1089,6 +1298,40 @@ class BidsManager(Frame, object):  # !!!!!!!!!! object is used to make the class
             messagebox.showerror('ERROR', err)
             self.make_available()
             return
+
+    def manipulate_data(self):
+        self.make_idle('Export/Merge data in process')
+        if self.curr_bids is None:
+            self.update_text('The menu Export/Merge cannot be selected without setting a bids directory.\n')
+            self.make_available()
+            return
+        output_dict = BidsSelectDialog(self, self.curr_bids, analysis_dict='Export/Merge')
+        if output_dict.log_error:
+            self.update_text(output_dict.log_error)
+            self.make_available()
+            return
+        try:
+            exp.export_data(self.curr_bids, output_dict.results, self)
+        except Exception as err:
+            messagebox.showerror('ERROR', err)
+            self.curr_bids._assign_bids_dir(self.curr_bids.dirname)
+            self.make_available()
+            return
+        self.make_available()
+
+    def create_pipeline(self):
+        self.make_idle('Creating JSON pipeline in process')
+        if self.curr_bids is None:
+            self.update_text('The menu Add Pipeline cannot be selected without setting a bids directory.\n')
+            self.make_available()
+            return
+        out = PipelineDialog(self, self.curr_bids)
+        if out.log_error:
+            self.update_text(out.log_error)
+        if out.pipname:
+            self.pipeline_menu.add_command(label=out.pipname, command=lambda nm=out.pipname: self.run_analysis(nm))
+            self.update_text('{} has been add to BIDS Pipeline.\n'.format(out.pipname))
+        self.make_available()
 
     @staticmethod
     def make_table(table):
@@ -2055,7 +2298,8 @@ class BidsBrickDialog(FormDialog):
     def remove_file(self, mod_brick, key, index):
         if BidsBrickDialog.meta_brick == 'BidsDataset' and \
                 messagebox.askyesno('Remove File', 'Are you sure you want to remove ' + mod_brick['fileLoc'] + '?'):
-            self.config(cursor="wait")
+            if platform.system() == 'Windows': self.config(cursor="wait")
+            if platform.system() == 'Linux': self.config(cursor="watch")
             BidsBrickDialog.bidsdataset.remove(mod_brick, with_issues=True)
             BidsBrickDialog.bidsdataset.check_requirements(specif_subs=mod_brick['sub'])
             self.populate_list(self.key_listw[key], self.main_brick[key])
@@ -2083,6 +2327,8 @@ class BidsBrickDialog(FormDialog):
             messagebox.askyesno('Remove {}'.format(key), 'Are you sure you want to remove ' + to_display + ' from the dataset?'):
             self.config(cursor="wait")
             BidsBrickDialog.bidsdataset.remove(input_dict, in_deriv=in_deriv)
+            if BidsBrickDialog.meta_brick == 'Pipeline':
+                self.master.main_brick.save_as_json()
             self.populate_list(self.key_listw[key], self.main_brick[key])
             self.config(cursor="")
 
@@ -2236,6 +2482,9 @@ class BidsBrickDialog(FormDialog):
     def rename_derivatives(self, k):
         idx = self.key_listw[k].curselection()[0]
         dev_name = self.main_brick['Derivatives'][0]['Pipeline'][idx]['name']
+        if dev_name.startswith('log') or dev_name.startswith('parsing'):
+            messagebox.showinfo('Info', 'You cannot rename the folder {}.'.forma(dev_name))
+            return
         modif_name = ModifName(self, dev_name)
         pip_variant = dev_name.split('-')
         pip_name = pip_variant[0]
@@ -2246,6 +2495,11 @@ class BidsBrickDialog(FormDialog):
             if '-' in new_variant:
                 new_variant = new_variant.replace('-', '')
             new_pip_name = pip_name + '-' + new_variant
+            #check if the new name already exists
+            namelist = [elt['name'] for elt in self.main_brick['Derivatives'][0]['Pipeline']]
+            if new_pip_name in namelist:
+                messagebox.showerror('Error', 'The name choose {} already exist'.format(new_pip_name))
+                return
             #rename in parsing and change the folder name and dataset_desc
             if os.path.exists(os.path.join(self.main_brick.dirname, 'derivatives', dev_name)):
                 os.rename(os.path.join(self.main_brick.dirname, 'derivatives', dev_name), os.path.join(self.main_brick.dirname, 'derivatives', new_pip_name))
@@ -2254,17 +2508,33 @@ class BidsBrickDialog(FormDialog):
                     for mod in sub:
                         if mod in bids.Process.get_list_subclasses_names() and sub[mod]:
                             for elt in sub[mod]:
-                                elt['fileLoc'] = elt['fileLoc'].replace(dev_name, new_pip_name)
+                                dirname = os.path.dirname(elt['fileLoc'])
+                                new_dir = dirname.replace(dev_name, new_pip_name)
+                                elt['fileLoc'] = elt['fileLoc'].replace(dirname, new_dir)
                         elif mod == 'Scans' and sub[mod]:
                             for scan in sub[mod]:
-                                scan['fileLoc'] = scan['fileLoc'].replace(dev_name, new_pip_name)
+                                dirname = os.path.dirname(scan['fileLoc'])
+                                new_dir = dirname.replace(dev_name, new_pip_name)
+                                scan['fileLoc'] = scan['fileLoc'].replace(dirname, new_dir)
                 self.main_brick['Derivatives'][0]['Pipeline'][idx]['DatasetDescJSON']['Name'] = new_pip_name
                 if 'PipelineDescription' in self.main_brick['Derivatives'][0]['Pipeline'][idx]['DatasetDescJSON'].keys():
                     if 'fileLoc' in self.main_brick['Derivatives'][0]['Pipeline'][idx]['DatasetDescJSON']['PipelineDescription']:
+                        dirname = os.path.dirname(self.main_brick['Derivatives'][0]['Pipeline'][idx]['DatasetDescJSON']['PipelineDescription']['fileLoc'])
+                        new_dir = dirname.replace(dev_name, new_pip_name)
                         self.main_brick['Derivatives'][0]['Pipeline'][idx]['DatasetDescJSON']['PipelineDescription']['fileLoc'] = \
                         self.main_brick['Derivatives'][0]['Pipeline'][idx]['DatasetDescJSON']['PipelineDescription'][
-                            'fileLoc'].replace(dev_name, new_pip_name)
+                            'fileLoc'].replace(dirname, new_dir)
                 self.main_brick['Derivatives'][0]['Pipeline'][idx]['DatasetDescJSON'].write_file(os.path.join(self.main_brick.dirname, 'derivatives', new_pip_name, bids.DatasetDescJSON.filename))
+                # Go throught dev folder to check f the name is in input
+                for pip in self.main_brick['Derivatives'][0]['Pipeline']:
+                    if 'SourceDataset' in pip['DatasetDescJSON'].keys():
+                        for key in pip['DatasetDescJSON']['SourceDataset']:
+                            if key.startswith('Input') and 'DerivFolder' in pip['DatasetDescJSON']['SourceDataset'][key].keys():
+                                if dev_name in pip['DatasetDescJSON']['SourceDataset'][key]['DerivFolder']:
+                                    idx_dev = pip['DatasetDescJSON']['SourceDataset'][key]['DerivFolder'].index(dev_name)
+                                    pip['DatasetDescJSON']['SourceDataset'][key]['DerivFolder'][idx_dev] = \
+                                        pip['DatasetDescJSON']['SourceDataset'][key]['DerivFolder'][idx_dev].replace(dev_name, new_pip_name)
+                                    pip['DatasetDescJSON'].write_file(os.path.join(self.main_brick.dirname, 'derivatives', pip['name'], bids.DatasetDescJSON.filename))
                 self.main_brick.save_as_json()
             else:
                 messagebox.showerror('Error', 'The derivative {} doesn"t exist'.format(dev_name))
@@ -2430,6 +2700,7 @@ class BidsSelectDialog(TemplateDialog):
             raise TypeError('Second input should be a bids dataset')
 
         #init variable
+        self.select_sub = []
         self.log_error = ''
         self.soft_name = None
         self.soft_list = [os.path.splitext(elt)[0] for elt in os.listdir(os.path.join(os.getcwd(), 'SoftwarePipeline')) if elt.endswith('.json')]
@@ -2439,24 +2710,33 @@ class BidsSelectDialog(TemplateDialog):
         self.param_script = {}
         self.param_gui = {}
         self.frame_soft = {}
+        self.frame_title = {}
+        self.batch_frame = {}
         self.batch = False
         self.batch_file = None
+        self.dev_list = [elt['name'] for elt in self.bids_data['Derivatives'][0]['Pipeline'] if elt['name'] not in ['log', 'parsing', 'bids_uploader'
+                                                                                                                    'bids_pipeline', 'anywave']]
+        self.dev_list.insert(0, '')
+        self.dev_output = ''
+        self.tmp_subjects = []
+        self.sub2remove = []
         self.subject_interface = itf.Interface(self.bids_data)
         if analysis_dict and isinstance(analysis_dict, pip.PipelineSetting):
             self.soft_name = analysis_dict.jsonfilename
             try:
                 self.parameter_interface['Parameters'] = itf.ParameterInterface(self.bids_data, analysis_dict['Parameters'])
                 self.parameter_interface['Input'] = {}
-                for cnt, elt in enumerate(analysis_dict['Parameters']['Input']):
-                    tag_val = elt['tag']
-                    if not tag_val:
-                        tag_val = 'in'+str(cnt)
-                    self.parameter_interface['Input']['Input_'+tag_val] = itf.InputParameterInterface(self.bids_data, elt)
+                if 'Input' in analysis_dict['Parameters']:
+                    for cnt, elt in enumerate(analysis_dict['Parameters']['Input']):
+                        tag_val = elt['Tag']
+                        if not tag_val:
+                            tag_val = 'in'+str(cnt)
+                        self.parameter_interface['Input']['Input_'+tag_val] = itf.InputParameterInterface(self.bids_data, elt)
             except EOFError as err:
                 messagebox.showerror('ERROR', err)
                 return
-            self.copy_values_in_list(self.soft_name)
-            self.parameter_list[self.soft_name]['Software'] = analysis_dict['Name']
+            soft_name_key = self.copy_values_in_list(self.soft_name)
+            self.parameter_list[soft_name_key]['Software'] = analysis_dict['Name']
         elif analysis_dict and analysis_dict == 'batch' and batch_file is None:
             self.batch = True
         elif analysis_dict and analysis_dict == 'batch' and batch_file:
@@ -2466,23 +2746,31 @@ class BidsSelectDialog(TemplateDialog):
             if any(elt in self.batch_file.keys() for elt in ['analysis_param', 'input_param', 'subject-selected']):
                 temp_batch = {self.batch_file['JsonName']: self.batch_file}
                 self.batch_file = temp_batch
-
+        ##Add possibility for the merge/anonymise/export part
+        elif analysis_dict and analysis_dict == 'Export/Merge':
+            self.soft_name = 'exp'
+            self.parameter_interface['Parameters'] = exp.ParametersInterface(bids_data)
+            self.parameter_interface['Input'] = {}
+            soft_name_key = self.copy_values_in_list(self.soft_name)
+            self.parameter_list[soft_name_key]['Software'] = analysis_dict
         super().__init__(parent)
 
     def copy_values_in_list(self, soft_name):
-        self.parameter_list[soft_name] = {}
-        self.parameter_list[soft_name]['JsonName'] = soft_name
+        nbr = len(self.parameter_list)
+        soft_name_key = str(nbr) +'_' + soft_name
+        self.parameter_list[soft_name_key] = {}
+        self.parameter_list[soft_name_key]['JsonName'] = soft_name
         for key in self.parameter_interface:
             if isinstance(self.parameter_interface[key], itf.Interface):
-                self.parameter_list[soft_name][key] = type(self.parameter_interface[key])(self.bids_data)
-                self.parameter_list[soft_name][key].copy_values(self.parameter_interface[key])
+                self.parameter_list[soft_name_key][key] = type(self.parameter_interface[key])(self.bids_data)
+                self.parameter_list[soft_name_key][key].copy_values(self.parameter_interface[key])
             elif isinstance(self.parameter_interface[key], dict):
-                self.parameter_list[soft_name][key] = {}
+                self.parameter_list[soft_name_key][key] = {}
                 for clef in self.parameter_interface[key]:
                     if isinstance(self.parameter_interface[key][clef], itf.Interface):
-                        self.parameter_list[soft_name][key][clef] = type(self.parameter_interface[key][clef])(self.bids_data)
-                        self.parameter_list[soft_name][key][clef].copy_values(self.parameter_interface[key][clef])
-
+                        self.parameter_list[soft_name_key][key][clef] = type(self.parameter_interface[key][clef])(self.bids_data)
+                        self.parameter_list[soft_name_key][key][clef].copy_values(self.parameter_interface[key][clef])
+        return soft_name_key
 
     def body(self, parent):
         if self.batch:
@@ -2493,6 +2781,9 @@ class BidsSelectDialog(TemplateDialog):
         self.All_sub = IntVar()
         self.Id_sub = IntVar()
         self.Crit_sub = IntVar()
+        self.Dev_sub = IntVar()
+        self.out_local = IntVar()
+        self.out_local_path = ['dir']
         frame_subject = Frame(parent,  relief=GROOVE, borderwidth=2)
         Label(frame_subject, text='Select subjects for analysis', font='bold', fg='#1F618D').pack(side=TOP)
         frame_subject.pack(side=TOP)
@@ -2503,9 +2794,13 @@ class BidsSelectDialog(TemplateDialog):
         Id_sub_butt.pack(side=LEFT)
         Crit_sub_butt = Checkbutton(frame_sub_check, text='Select subjects by criteria', variable=self.Crit_sub, command=lambda: enable_frames(Frame_subject_criteria, self.Crit_sub))
         Crit_sub_butt.pack(side=LEFT)
+        dev_folder_sub_butt = Checkbutton(frame_sub_check, text='Select subject(s) that are not in specific analysis folder', variable=self.Dev_sub, command=lambda: enable_frames(Frame_subject_dev, self.Dev_sub))
+        dev_folder_sub_butt.pack(side=LEFT)
         Frame_subject_list = Frame(frame_subject)
-        Frame_subject_criteria = Frame(frame_subject)
+        frame_temp = Frame(frame_subject)
+        Frame_subject_criteria = Frame(frame_temp)
         Label(Frame_subject_criteria, text='Select criteria for multiple subjects analysis', font='bold', fg='#1F618D').grid(row=0)
+        Frame_subject_dev = Frame(frame_temp)
 
         #Subject list
         self.subject = Label(Frame_subject_list, text='Subject', font='bold', fg='#1F618D')
@@ -2529,34 +2824,59 @@ class BidsSelectDialog(TemplateDialog):
             Crit_sub_butt.config(state=DISABLED)
             cntC = 0
 
+        #Select the derivatives folder
+        if not self.batch:
+            self.dev_label = Label(Frame_subject_dev, text='Select the derivatives folder to append subjects', font='bold', fg='#1F618D')
+            self.dev_label.grid(row=0, column=0, sticky=W)
+            self.dev_select = ttk.Combobox(Frame_subject_dev, values=self.dev_list)#CheckbuttonList(Frame_subject_dev, self.dev_list, row_list=0, col_list=3).variable_list
+            self.dev_select.current(0)
+            self.dev_select.grid(row=0, column=3)
+
         #place the frame
         if cntC < 1:
             cntC = 1
         frame_sub_check.pack(side=TOP)
         Frame_subject_list.pack(side=LEFT)#.grid(row=1, column=0, columnspan=1, rowspan=cntR + cntC)
         enable(Frame_subject_list, 'disabled')
-        Frame_subject_criteria.pack(side=LEFT)#.grid(row=cntR+1, column=1, rowspan=cntC, columnspan=max_crit)
+        Frame_subject_criteria.pack(side=TOP)#.grid(row=cntR+1, column=1, rowspan=cntC, columnspan=max_crit)
         enable(Frame_subject_criteria, 'disabled')
+        Frame_subject_dev.pack(side=TOP)  # .grid(row=cntR+1, column=1, rowspan=cntC, columnspan=max_crit)
+        enable(Frame_subject_dev, 'disabled')
+        frame_temp.pack(side=LEFT)
         frame_subject.pack(side=TOP)
+        # probleme with enable as the frame are in a frame
+
+        # propose to write the results in local folder
+        frame_for_local = Frame(parent)
+        frame_for_browse = Frame(frame_for_local)
+        out_local = Checkbutton(frame_for_local, text='Do you want to write the results on specific directory outside your BIDS Dataset', variable=self.out_local, command=lambda: enable_frames(frame_for_browse, self.out_local))
+        out_local.pack(side=TOP)
+        entry_2write = Entry(frame_for_browse)
+        l = Button(frame_for_browse, text='Browse', command=lambda file=self.out_local_path: self.ask4file(file, entry_2write))
+        entry_2write.pack(side=LEFT)
+        l.pack(side=LEFT)
+        frame_for_browse.pack(side=TOP)
+        enable(frame_for_browse, 'disabled')
 
         frame_okcancel = Frame(parent)
         frame_okcancel.pack(side=BOTTOM)
+        frame_for_local.pack(side=BOTTOM)
         if self.batch or self.soft_name:
             frame_add_soft = Frame(parent)
             frame_add_soft.pack(side=TOP)
             frame_multi_soft = DoubleScrollbarFrame(parent)
             if not self.batch:
-                self.create_frame_parameters(frame_multi_soft)
+                soft_name_key = self.create_frame_parameters(frame_multi_soft)
             else:
                 soft_list_button = ttk.Combobox(frame_add_soft, values=self.soft_list)
                 soft_list_button.grid(row=0, column=0)
-                add_soft = Button(frame_add_soft, text='+', command=lambda: self.create_frame_parameters(frame_multi_soft, soft_name=self.soft_list[soft_list_button.current()]))
+                add_soft = Button(frame_add_soft, text='+', command=lambda: self.create_frame_parameters_for_batch(frame_multi_soft, soft_name=self.soft_list[soft_list_button.current()]))
                 add_soft.grid(row=0, column=1)
                 if self.batch_file:
                     enable(Frame_subject_list, 'normal')
                     for key in self.batch_file:
                         soft_name = self.batch_file[key]['JsonName']
-                        self.create_frame_parameters(frame_multi_soft, soft_name=soft_name, soft_dict=self.batch_file[key])
+                        soft_name_key = self.create_frame_parameters(frame_multi_soft, soft_name=soft_name, soft_dict=self.batch_file[key])
             frame_multi_soft.frame.pack(side=TOP)
             frame_multi_soft.update_scrollbar()
 
@@ -2564,111 +2884,138 @@ class BidsSelectDialog(TemplateDialog):
         self.ok_cancel_button(frame_okcancel)
         save = Button(frame_okcancel, text='Save', command=lambda: self.save())
         save.pack(side=RIGHT, fill=Y, expand=1, padx=10, pady=5)
+        if not self.batch and self.soft_name is not None:
+            self.after(3000, lambda fr=frame_multi_soft: self.refresh_gui(fr))
 
     def create_frame_parameters(self, parent, soft_name=None, soft_dict=None):
-        frame_parameters = Frame(parent.frame, relief=GROOVE, borderwidth=2)
+        if len(self.parameter_list) == 9:
+            messagebox.showinfo('Information', 'You cannot add a new process in your batch, the limitation is 10.')
+            return
         if soft_name:
-            self.soft_name = soft_name
+            soft_name_key = soft_name
+            soft_elt = soft_name.split('_')
+            if soft_elt[0].isdigit():
+                self.soft_name = '_'.join(soft_elt[1::])
+            else:
+                self.soft_name = '_'.join(soft_elt[0::])
             try:
+                nbr = len(self.parameter_list)
                 nbr_soft = len(self.frame_soft.keys())
-                analysis_dict = pip.PipelineSetting(self.bids_data, soft_name)
-                self.parameter_interface['Parameters'] = itf.ParameterInterface(self.bids_data, analysis_dict['Parameters'])
+                analysis_dict = pip.PipelineSetting(self.bids_data, self.soft_name)
+                self.parameter_interface['Parameters'] = itf.ParameterInterface(self.bids_data, analysis_dict['Parameters'], nbr=nbr)
                 self.parameter_interface['Input'] = {}
                 for cnt, elt in enumerate(analysis_dict['Parameters']['Input']):
-                    tag_val = elt['tag']
+                    tag_val = elt['Tag']
                     if not tag_val:
                         tag_val = 'in' + str(cnt)
                     self.parameter_interface['Input']['Input_' + tag_val] = itf.InputParameterInterface(self.bids_data, elt)
-                    if 'deriv-folder' in self.parameter_interface['Input']['Input_' + tag_val]:
+                    if 'DerivFolder' in self.parameter_interface['Input']['Input_' + tag_val]:
                         if nbr_soft >= 1:
                             for nb in range(1, nbr_soft+1, 1):
-                                self.parameter_interface['Input']['Input_' + tag_val]['deriv-folder']['value'].append('{}-Previous analysis results'.format(str(nb)))
+                                self.parameter_interface['Input']['Input_' + tag_val]['DerivFolder']['value'].append('{}-Previous analysis results'.format(str(nb)))
             except EOFError as err:
                 messagebox.showerror('ERROR', err)
                 return
-            self.copy_values_in_list(self.soft_name)
-            self.parameter_list[self.soft_name]['Software'] = analysis_dict['Name']
-            self.frame_soft[self.soft_name] = frame_parameters
-            frame_title = Frame(frame_parameters)
-            Label(frame_title, text=self.soft_name, justify='center', fg='#2E006C').grid(row=0, column=0)
-            Button(frame_title, text='-', command=lambda: self.delete_software_in_batch(self.soft_name)).grid(row=0, column=1)
-            #Button(frame_title, text='valid', command=parent.Frame_to_scrollbar.master.master.grab_set()).grid(row=0, column=2)
-            frame_title.pack(side=TOP)
+            soft_name_key = self.copy_values_in_list(self.soft_name)
+            self.parameter_list[soft_name_key]['Software'] = analysis_dict['Name']
 
-        if self.parameter_interface['Input']:
-            frame_input_criteria = Frame(frame_parameters)
-            Label(frame_input_criteria, text='Select input criteria', font='bold', fg='#1F618D').pack()
-            frame_dict = dict()
-            for cnt, key in enumerate(self.parameter_interface['Input']):
-                frame_dict[key] = Frame(frame_input_criteria)
-                Label(frame_dict[key], text='{0}: '.format(' '.join(key.split('_')[1:])), font='bold',
-                      fg='#21177D').grid(row=0)
-                if soft_dict:
-                    max_req, cntR = self.create_button(frame_dict[key], self.parameter_interface['Input'][key], value_dict=soft_dict['input_param'][key])
-                else:
-                    max_req, cntR = self.create_button(frame_dict[key], self.parameter_interface['Input'][key])
-                frame_dict[key].pack(side=LEFT)
-            frame_input_criteria.pack(side=LEFT)
-        #Frame with the parameter selection
-        self.param_script[self.soft_name] = IntVar()
-        self.param_gui[self.soft_name] = IntVar()
-        frame_parameters_criteria = Frame(frame_parameters)
-        Label(frame_parameters_criteria, text='Select parameters for analysis', font='bold', fg='#1F618D').pack(side=TOP)
-        frame_param_check = Frame(frame_parameters_criteria)
-        frame_param_check.pack(side=TOP)
-        frame_param_select = Frame(frame_parameters_criteria)
-        frame_param_select.pack(side=TOP)
-        self.param_file[self.soft_name] = ['.json']
-        param_file = Button(frame_param_check, text='Filename path', command=lambda: self.ask4file(self.param_file[self.soft_name]))
-        import_param_button = Checkbutton(frame_param_check, text='Select your script with parameters values',
-                                          variable=self.param_script[self.soft_name],
-                                          command=lambda: param_file.configure(state='active'))
-        import_param_button.pack(side=LEFT)
-        param_file.pack(side=LEFT)
-        param_file.configure(state='disabled')
-        select_param_button = Checkbutton(frame_param_check, text='Use the GUI to determine analysis parameters',
-                                          variable=self.param_gui[self.soft_name],
-                                          command=lambda: enable_frames(frame_param_select, self.param_gui[self.soft_name]))
-        select_param_button.pack(side=LEFT)
-        if soft_dict:
-            select_param_button.select()
-            max_param, cntP = self.create_button(frame_param_select, self.parameter_interface['Parameters'], value_dict=soft_dict['analysis_param'])
-            enable(frame_param_select, 'normal')
         else:
-            max_param, cntP = self.create_button(frame_param_select, self.parameter_interface['Parameters'])
-            enable(frame_param_select, 'disabled')
-        frame_parameters_criteria.pack(side=LEFT)
-        frame_parameters.pack(side=TOP)
-        parent.frame.update_idletasks()
-        parent.canvas.config(scrollregion=parent.canvas.bbox("all"))
+            frame_parameters = Frame(parent.frame, relief=GROOVE, borderwidth=2)
+            soft_name_key ='0_' + self.soft_name
+            self.frame_soft[soft_name_key] = frame_parameters
+
+        # do it with function
+        in_dict = {}
+        if soft_dict and 'input_param' in soft_dict:
+            in_dict = soft_dict['input_param']
+        self.update_frame_input(soft_name_key, soft_dict=in_dict, parent=parent)
+
+        # Use the new fonction to update
+        param_dict = {}
+        if soft_dict and 'analysis_param' in soft_dict:
+            d = [key[0] for key in soft_dict['analysis_param']]
+            d = list(set(d))
+            if len(d) == 1 and d[0].isdigit():
+                param_dict = {key.replace(d[0]+'_', ''):soft_dict['analysis_param'][key] for key in soft_dict['analysis_param']}
+            else:
+                param_dict = soft_dict['analysis_param']
+        self.update_frame_parameter(parent, soft_name_key, param_dict)
+
+        return soft_name_key
 
     def delete_software_in_batch(self, soft_name):
         self.frame_soft[soft_name].destroy()
+        self.batch_frame[soft_name].destroy()
         del self.parameter_list[soft_name]
 
-    def get_results(self):
-        self.results = {key: {'input_param': {}, 'analysis_param': {}, 'subject_selected': []} for key in
-                        self.parameter_list}
-        select_sub = []
-        err_dict = {}
-        warn_dict = {}
-        # get the subject selected
+    def get_subjects_selection(self, refresh=False):
         if self.All_sub.get():
-            select_sub = self.subject_interface.subject
+            self.select_sub = self.subject_interface.subject
         elif self.Id_sub.get():
             for index in self.select_subject.curselection():
-                select_sub.append(self.select_subject.get(index))
+                self.select_sub.append(self.select_subject.get(index))
         elif self.Crit_sub.get():
             res_dict = self.subject_interface.get_parameter()
-            select_sub = self.subject_interface.get_subject_list(res_dict)
-        else:
+            self.select_sub = self.subject_interface.get_subject_list(res_dict)
+        elif self.Dev_sub.get():
+            # dev_dict = [self.dev_list[cnt] for cnt, elt in enumerate(self.dev_select) if elt.get()]
+            self.dev_output = self.dev_list[self.dev_select.current()]
+            if not self.dev_output == '':
+                if self.soft_name not in self.dev_output:
+                    messagebox.showerror('Error Subjects', 'You cannot use the derivatives {} folder as output.\n'.format(self.dev_output))
+                    return
+                sub_in_dev = [sub.replace('sub-', '') for sub in os.listdir(os.path.join(self.bids_data.dirname, 'derivatives', self.dev_output))
+                              if sub.startswith('sub-')]
+                self.select_sub = [sub['sub'] for sub in self.bids_data['Subject'] if sub['sub'] not in sub_in_dev]
+            else:
+                self.select_sub = []
+        elif not refresh:
             messagebox.showerror('Error Subjects', 'Please select subjects to analyse')
             return
-        if not select_sub:
-            select_sub = [sub['sub'] for sub in self.bids_data['Subject']]
+        if not self.select_sub and not refresh:
+            flag = messagebox.askyesno('Subject selection', 'No subjects correspond to your selection. Do you want to continue?')
+            if flag:
+                self.select_sub = []
+                #self.select_sub = [sub['sub'] for sub in self.bids_data['Subject']]
+            else:
+                return
+        if self.select_sub:
+            self.select_sub = list(set(self.select_sub))
+
+    def get_results(self):
+        self.results = {key: {'input_param': {}, 'analysis_param': {}, 'subject_selected': [], 'derivatives_output': '', 'local_output':''}
+                        for key in self.parameter_list}
+        self.get_subjects_selection()
+        self.select_sub = [sub for sub in self.select_sub if sub not in self.sub2remove]
+        err_dict = {}
+        warn_dict = {}
+        soft_dict = None
+        out_dict = None
+        if self.dev_output:
+            batch_file = os.path.join(self.bids_data.dirname, 'derivatives', self.dev_output, 'BP_parameters_file.json')
+            if os.path.exists(batch_file):
+                with open(batch_file, 'r') as file:
+                    soft_dict = json.load(file)
+            else:
+                soft_dict = None
+        if self.out_local.get():
+            out_dict = self.out_local_path[1]
+            if not os.path.exists(out_dict):
+                err_dict['All'] = 'The directory {} doesn"t exist'.format(out_dict)
+                return warn_dict, err_dict
+        if out_dict is not None and soft_dict is not None:
+            warn_dict['All'] = 'The folder {} will be used to determine parameters and subject selection but the ' \
+                               'results will be written in {}\n'.format(self.dev_output, out_dict)
+        # get the subject selected
         if self.parameter_list:
             for key in self.parameter_list:
-                self.results[key]['subject_selected'] = select_sub
+                if self.dev_output:
+                    self.results[key]['derivatives_output'] = self.dev_output
+                if out_dict:
+                    self.results[key]['local_output'] = out_dict
+                if self.dev_output and self.out_local.get():
+                    err_dict[key] += 'You cannot select a derivatives output and a local output\n'
+                self.results[key]['subject_selected'] = self.select_sub
                 self.results[key]['JsonName'] = self.parameter_list[key]['JsonName']
                 for inp in self.parameter_list[key]['Input']:
                     self.results[key]['input_param'][inp] = self.parameter_list[key]['Input'][inp].get_parameter()
@@ -2691,7 +3038,21 @@ class BidsSelectDialog(TemplateDialog):
                 warn_dict[key] = warn
                 err_dict[key] = err
         else:
-            self.results['subject_selected'] = select_sub
+            self.results['subject_selected'] = self.select_sub
+        if soft_dict:
+            # compare the results['input] and results['parameter'] with soft_dict
+            # if not the same return message error
+            for so in self.results:
+                if soft_dict['Software'] in so:
+                    for key in soft_dict:
+                        if key == 'analysis_param':
+                            for elt in soft_dict[key]:
+                                if self.results[so][key][elt] != soft_dict[key][elt]:
+                                    err_dict[so] += 'The values selected for parameter {} don"t correspond to the one in {}.\n'.format(elt, self.dev_output)
+                        elif key == 'input_param':
+                            # Don't know if I should compare the inputs
+                            pass
+            pass
         return warn_dict, err_dict
 
     def ok(self):
@@ -2699,6 +3060,8 @@ class BidsSelectDialog(TemplateDialog):
         str_err = ''
         for key in err:
             if err[key]:
+                if key not in warn:
+                    warn[key] = ''
                 str_err += 'Error parameters {}'.format(key) + ': ' + warn[key] + err[key] + '\n'
         if str_err:
             messagebox.showerror('Error parameters', str_err)
@@ -2712,6 +3075,25 @@ class BidsSelectDialog(TemplateDialog):
                                        'Your parameter selection has created warnings.\n' + str_warn + 'Do you want to modify your selection?')
             if flag:
                 return
+        # if not self.select_sub:
+        #     flag = messagebox.askyesno('No subject selected', 'Do you want to modify your selection?')
+        #     if flag:
+        #         return
+        # save the reading subject for parameters and Input
+        path_to_save = os.path.join(self.bids_data.dirname, 'derivatives', 'bids_pipeline', 'elements_by_subject')
+        os.makedirs(path_to_save, exist_ok=True)
+        to_save_all = {}
+        for soft in self.parameter_list:
+            to_save_all[soft] = {'Parameters': {}, 'Input': {}}
+            for param in self.parameter_list[soft]['Parameters']:
+                if 'savereadingbysub' in self.parameter_list[soft]['Parameters'] and param in self.parameter_list[soft]['Parameters'].savereadingbysub:
+                    to_save_all[soft]['Parameters'][param] = self.parameter_list[soft]['Parameters'].savereadingbysub[param]
+            for inp in self.parameter_list[soft]['Input']:
+                to_save_all[soft]['Input'][inp] = self.parameter_list[soft]['Input'][inp].savereadingbysub
+        filename = os.path.join(path_to_save, 'Elements_'+ datetime.now().strftime('%d%m%y')+'.json')
+        with open(filename, 'w') as f:
+            json_str = json.dumps(to_save_all, indent=1, separators=(',', ': '), ensure_ascii=False, sort_keys=False)
+            f.write(json_str)
         self.destroy()
 
     def save(self):
@@ -2732,14 +3114,15 @@ class BidsSelectDialog(TemplateDialog):
             messagebox.showinfo('Batch saved', 'Your batch has been saved in {}'.format(os.path.join(bp_dir, 'batch')))
             return
         else:
-            name = self.parameter_list[self.soft_name]['Software']
-            if '/' in name:
-                name = name.replace('/', '-')
+            name = {key: self.parameter_list[key]['Software'] for key in self.parameter_list if self.soft_name in key}
+            keys = list(name.keys())
+            if '/' in name[keys[0]]:
+                name[keys[0]] = name[keys[0]].replace('/', '-')
             bp_an = os.path.join(bp_dir, 'analysis_done')
             os.makedirs(bp_an, exist_ok=True)
-            filename = name + '_' + author + '_' + date + '_saved.json'
+            filename = name[keys[0]] + '_' + author + '_' + date + '_saved.json'
             with open(os.path.join(bp_an, filename), 'w+') as f:
-                json_str = json.dumps(self.results[self.soft_name], indent=1, separators=(',', ': '), ensure_ascii=False,
+                json_str = json.dumps(self.results[keys[0]], indent=1, separators=(',', ': '), ensure_ascii=False,
                                       sort_keys=False)
                 f.write(json_str)
             messagebox.showinfo('Batch saved', 'Your batch has been saved in {}'.format(os.path.join(bp_an, filename)))
@@ -2763,18 +3146,22 @@ class BidsSelectDialog(TemplateDialog):
         self.destroy()
 
     def create_button(self, frame, var_dict, max_col=None, value_dict=None):
-        cnt=0
+        cnt = 0
         if not max_col:
             max_col = 1
         label_dict = {clef: '' for clef in var_dict.keys() if var_dict[clef]['attribut'] != 'Label'}
         for cnt, key in enumerate(label_dict):
-            label_dict[key] = Label(frame, text=key)
+            if key[0].isdigit() and key[1] == '_':
+                lab = key[2::]
+            else:
+                lab = key
+            label_dict[key] = Label(frame, text=lab)
             label_dict[key].grid(row=cnt + 1, sticky=W)
             att_type = var_dict[key]['attribut']
             val_temp = var_dict[key]['value']
             val_sel = None
-            if value_dict and key in value_dict.keys():
-                val_sel = value_dict[key]
+            if value_dict and lab in value_dict.keys():
+                val_sel = value_dict[lab]
             if att_type == 'StringVar':
                 if isinstance(val_temp, str):
                     var_dict[key]['value'] = StringVar()
@@ -2801,6 +3188,14 @@ class BidsSelectDialog(TemplateDialog):
                         l.grid(row=cnt + 1, column=idx_var + 1, sticky=W + E)
                         idx_var += 1
                     max_col = max(max_col, idx_var)
+                elif isinstance(val_temp, StringVar):
+                    l = Entry(frame, textvariable=val_temp)
+                    l.delete(0, END)
+                    if val_sel:
+                        l.insert(END, val_sel)
+                    else:
+                        l.insert(END, val_temp._name.replace('_' + key, ''))
+                    l.grid(row=cnt + 1, column=max_col, sticky=W + E)
             elif att_type == 'Listbox': #A revoir
                 l = ttk.Combobox(frame, values=val_temp)
                 if val_sel:
@@ -2811,7 +3206,7 @@ class BidsSelectDialog(TemplateDialog):
                         idx = val_temp.index(val_sel)
                         l.current(idx)
                 l.grid(row=cnt + 1, column=max_col, sticky=W + E)
-                var_dict[key]['value'] = l
+                var_dict[key]['results'] = l
             elif att_type == 'Variable':
                 var_dict[key]['results'] = CheckbuttonList(frame, val_temp, row_list=cnt + 1, col_list=max_col).variable_list
                 if val_sel:
@@ -2830,6 +3225,8 @@ class BidsSelectDialog(TemplateDialog):
                         val = False
                 elif isinstance(val_temp, bool):
                     val = val_temp
+                elif isinstance(val_temp, BooleanVar):
+                    val = val_temp.get()
                 if val_sel:
                     val = val_sel
                 var_dict[key]['value'] = BooleanVar()
@@ -2847,7 +3244,71 @@ class BidsSelectDialog(TemplateDialog):
 
         return max_col, cnt
 
-    def ask4file(self, file):
+    def update_frame_parameter(self, parent, soft_name_key, soft_dict=None):
+        frame_parameters = self.frame_soft[soft_name_key]
+        # clean the frame before to put things again
+        # for widget in frame_parameters.winfo_children():
+        #     widget.destroy()
+        self.param_script[soft_name_key] = IntVar()
+        self.param_gui[soft_name_key] = IntVar()
+        frame_parameters_criteria = Frame(frame_parameters)
+        Label(frame_parameters_criteria, text='Select parameters for analysis', font='bold', fg='#1F618D').pack(
+            side=TOP)
+        frame_param_check = Frame(frame_parameters_criteria)
+        frame_param_check.pack(side=TOP)
+        frame_param_select = Frame(frame_parameters_criteria)
+        frame_param_select.pack(side=TOP)
+        self.param_file[soft_name_key] = ['.json']
+        param_file = Button(frame_param_check, text='Filename path',
+                            command=lambda: self.ask4file(self.param_file[soft_name_key]))
+        import_param_button = Checkbutton(frame_param_check, text='Select your script with parameters values',
+                                          variable=self.param_script[soft_name_key],
+                                          command=lambda: param_file.configure(state='active'))
+        import_param_button.pack(side=LEFT)
+        param_file.pack(side=LEFT)
+        param_file.configure(state='disabled')
+        select_param_button = Checkbutton(frame_param_check, text='Use the GUI to determine analysis parameters',
+                                          variable=self.param_gui[soft_name_key],
+                                          command=lambda: enable_frames(frame_param_select,
+                                                                        self.param_gui[soft_name_key]))
+        select_param_button.pack(side=LEFT)
+        if soft_dict:
+            select_param_button.select()
+            max_param, cntP = self.create_button(frame_param_select, self.parameter_list[soft_name_key]['Parameters'],
+                                                 value_dict=soft_dict)
+            enable(frame_param_select, 'normal')
+        else:
+            max_param, cntP = self.create_button(frame_param_select, self.parameter_list[soft_name_key]['Parameters'])
+            enable(frame_param_select, 'disabled')
+        frame_parameters_criteria.pack(side=LEFT)
+        frame_parameters.pack(side=TOP)
+        parent.frame.update_idletasks()
+        parent.canvas.config(scrollregion=parent.canvas.bbox("all"))
+
+    def update_frame_input(self, soft_name_key, soft_dict=None, clean=False, parent=None):
+        if soft_name_key not in self.frame_soft:
+            self.frame_soft[soft_name_key] = Frame(parent.frame, relief=GROOVE, borderwidth=2)
+        frame_parameters = self.frame_soft[soft_name_key]
+        # clear the input
+        if clean:
+            for widget in frame_parameters.winfo_children():
+                widget.destroy()
+        if self.parameter_list[soft_name_key]['Input']:
+            frame_input_criteria = Frame(frame_parameters)
+            Label(frame_input_criteria, text='Select input criteria', font='bold', fg='#1F618D').pack()
+            frame_dict = dict()
+            for cnt, key in enumerate(self.parameter_list[soft_name_key]['Input']):
+                frame_dict[key] = Frame(frame_input_criteria)
+                Label(frame_dict[key], text='{0}: '.format(' '.join(key.split('_')[1:])), font='bold',
+                      fg='#21177D').grid(row=0)
+                if soft_dict:
+                    max_req, cntR = self.create_button(frame_dict[key], self.parameter_list[soft_name_key]['Input'][key], value_dict=soft_dict[key])
+                else:
+                    max_req, cntR = self.create_button(frame_dict[key], self.parameter_list[soft_name_key]['Input'][key])
+                frame_dict[key].pack(side=LEFT)
+            frame_input_criteria.pack(side=LEFT)
+
+    def ask4file(self, file, entry_2write=None):
         #ajouter directory ask
         if file == ['dir']:
             filename = filedialog.askdirectory(title='Select directory', initialdir=self.bids_data.cwdir)
@@ -2858,6 +3319,168 @@ class BidsSelectDialog(TemplateDialog):
             file.append(filename)
         else:
             file[1] = filename
+        if entry_2write is not None:
+            entry_2write.delete(0, END)
+            entry_2write.insert(END, filename)
+
+    def create_frame_parameters_for_batch(self, frame, soft_name):
+        self.get_subjects_selection(refresh=True)
+        # soft_name_key = self.copy_values_in_list(soft_name)
+        nbr = len(self.parameter_list)
+        soft_name_key = str(nbr) + '_' + soft_name
+        self.batch_frame[soft_name_key] = Frame(frame.frame, relief=GROOVE, borderwidth=2)
+        self.frame_title[soft_name_key] = Frame(self.batch_frame[soft_name_key])
+        Label(self.frame_title[soft_name_key], text=soft_name, justify='center', fg='#2E006C').grid(row=0,
+                                                                                                         column=0)
+        Button(self.frame_title[soft_name_key], text='-',
+               command=lambda: self.delete_software_in_batch(soft_name_key)).grid(row=0, column=1)
+        self.frame_soft[soft_name_key] = Frame(self.batch_frame[soft_name_key])
+        self.frame_title[soft_name_key].pack(side=TOP)
+        self.frame_soft[soft_name_key].pack(side=TOP)
+        soft_name_key = self.create_frame_parameters(frame, soft_name_key)
+        soft_dict = None
+        self.refresh_input_selection(soft_name_key, self.select_sub, soft_dict, clean=True)
+        self.refresh_parameter_selection(soft_name_key, self.select_sub, frame, soft_dict)
+        self.batch_frame[soft_name_key].pack(side=TOP)
+        frame.update_scrollbar()
+
+    def refresh_gui(self, fr):
+        # faire le refresh toute les 5sec en verifiant que le get_subject donne la mm chose une fois que c'est le cas
+        # stop le refresh il faut aussi garder les valeurs indiquer dans les paramètres aux cas ou l'utilsateur aurait
+        # commencer à remplir
+        self.get_subjects_selection(refresh=True)
+        do_the_refresh = True
+        if not self.select_sub:
+            do_the_refresh = False
+        elif not self.tmp_subjects:
+            self.tmp_subjects = [sub for sub in self.select_sub]
+        elif not (set(self.select_sub)-set(self.tmp_subjects)):
+            do_the_refresh = False
+        elif (set(self.select_sub)-set(self.tmp_subjects)) and all(elt in self.sub2remove for elt in list(set(self.select_sub)-set(self.tmp_subjects))):
+            self.select_sub = self.tmp_subjects
+            do_the_refresh = False
+        if do_the_refresh:
+            soft_dict = None
+            self.sub2remove = []
+            # read parameters from old analysis
+            if self.dev_output:
+                batch_file = os.path.join(self.bids_data.dirname, 'derivatives', self.dev_output, 'BP_parameters_file.json')
+                if os.path.exists(batch_file):
+                    with open(batch_file, 'r') as file:
+                        soft_dict = json.load(file)
+            if self.select_sub and not self.batch:
+                # get the current parameters
+                results = self.parameter_list['0_'+self.soft_name]['Parameters'].get_parameter()
+                if soft_dict is None and any(results[val] for val in results):
+                    soft_dict = {'analysis_param':results, 'input_param': {}}
+                elif soft_dict is not None: #and any(results[val] for val in results):
+                    # Apply the one from the derivatives
+                    soft_dict['subject_selected'] = self.select_sub
+                    pass
+                self.refresh_input_selection('0_' + self.soft_name, self.select_sub, soft_dict, clean=True)
+                self.refresh_parameter_selection('0_' + self.soft_name, self.select_sub, fr, soft_dict)
+            elif self.select_sub and self.batch:
+                for soft in self.parameter_list:
+                    # get the current parameters
+                    results = self.parameter_list[soft]['Parameters'].get_parameter()
+                    if soft_dict is None and any(results[val] for val in results):
+                        soft_dict = {'analysis_param': results, 'input_param': {}}
+                    elif soft_dict is not None and any(results[val] for val in results):
+                        pass
+                    self.refresh_input_selection(soft, self.select_sub, clean=True)
+                    self.refresh_parameter_selection(soft, self.select_sub, fr)
+            self.tmp_subjects = [sub for sub in self.select_sub]
+        self.after(3000, lambda fr=fr: self.refresh_gui(fr))
+
+    def refresh_parameter_selection(self, soft_name_key, sub_selected, parent, soft_dict=None):
+        param_dict = self.parameter_list[soft_name_key]['Parameters']
+        for key in param_dict:
+            try:
+                if key in param_dict.savereadingbysub: #'savereadingbysub' in param_dict and
+                    new_val = []
+                    for sub in param_dict.savereadingbysub[key]:
+                        if sub.replace('sub-', '') in sub_selected:
+                            if not new_val:
+                                is_same, other = itf.compare_listes(new_val, param_dict.savereadingbysub[key][sub])
+                            else:
+                                is_same, other = itf.compare_listes(new_val, param_dict.savereadingbysub[key][sub], get_only_common=True)
+                                new_val = [elt for elt in other]
+                    if new_val:
+                        new_val.sort()
+                        param_dict[key]['value'] = new_val
+            except:
+                continue
+        if soft_dict is None:
+            soft_dict = {'analysis_param':None}
+
+        if soft_dict['analysis_param'] is not None:
+            for param in soft_dict['analysis_param']:
+                if (hasattr(param_dict, 'savereadingbysub') and param_dict.savereadingbysub is not None) and param in param_dict.savereadingbysub\
+                        and 'subject_selected' in soft_dict:
+                    for sub in soft_dict['subject_selected']:
+                        sub = 'sub-'+sub
+                        if sub not in param_dict.savereadingbysub[param]:
+                            messagebox.showerror('WARNING', 'Subject {} doesn"t have the required elements. He will be removed.'.format(sub))
+                            self.sub2remove.append(sub.replace('sub-', ''))
+                        else:
+                            if any(elt not in param_dict.savereadingbysub[param][sub] for elt in soft_dict['analysis_param'][param]):
+                                messagebox.showerror('WARNING',
+                                                     'Subject {} doesn"t have the required elements. He will be removed.'.format(
+                                                         sub))
+                                self.sub2remove.append(sub.replace('sub-', ''))
+                    if self.sub2remove:
+                        for sub in self.sub2remove:
+                            soft_dict['subject_selected'].remove(sub)
+                            if sub in self.select_sub:
+                                self.select_sub.remove(sub)
+        if 'subject_selected' in soft_dict and not soft_dict['subject_selected']:
+            messagebox.showerror('WARNING', 'The Subject selection by analysis folder is not correct. '
+                                            'Please verify your JSON file software because the events used are not the same.')
+            soft_dict['analysis_param'] = None
+            self.dev_output = ''
+        self.update_frame_parameter(parent, soft_name_key, soft_dict['analysis_param'])
+
+    def refresh_input_selection(self, soft_name_key, sub_selected, soft_dict=None, clean=False):
+        param_dict = self.parameter_list[soft_name_key]['Input']
+        inp_select = {}
+        have_already_selected = False
+        for key in param_dict:
+            inp_select[key] = param_dict[key].get_parameter()
+            if any(inp_select[key][val] for val in inp_select[key]):
+                have_already_selected = True
+            for elt in param_dict[key]:
+                new_val = []
+                for sub in param_dict[key].savereadingbysub:
+                    if sub.replace('sub-', '') in sub_selected:
+                        if elt in param_dict[key].savereadingbysub[sub]:
+                            if not new_val:
+                                is_same, other = itf.compare_listes(new_val, param_dict[key].savereadingbysub[sub][elt])
+                            else:
+                                is_same, other = itf.compare_listes(new_val, param_dict[key].savereadingbysub[sub][elt],
+                                                             get_only_common=True)
+                                new_val = [elt for elt in other]
+                if new_val:
+                    param_dict[key][elt]['value'] = new_val
+        if (soft_dict is None and have_already_selected) or (soft_dict is not None and not soft_dict['input_param'] and have_already_selected):
+            if soft_dict is None:
+                soft_dict = {}
+            soft_dict['input_param'] = inp_select
+        elif soft_dict is not None and soft_dict['input_param']:
+            # compare the two dict
+            for key in soft_dict['input_param']:
+                for elt in soft_dict['input_param'][key]:
+                    if elt in param_dict[key]:
+                        if any(v not in param_dict[key][elt]['value'] for v in soft_dict['input_param'][key][elt]):
+                            try:
+                                if have_already_selected and all(v not in param_dict[key][elt]['value'] for v in inp_select[key][elt]):
+                                    soft_dict['input_param'][key][elt] = [v for v in inp_select[key][elt]]
+                                else:
+                                    soft_dict['input_param'][key][elt] = []
+                            except:
+                                soft_dict['input_param'][key][elt] = []
+        elif soft_dict is None or ('input_param' not in soft_dict):
+            soft_dict = {'input_param': None}
+        self.update_frame_input(soft_name_key, soft_dict['input_param'], clean=clean)
 
 
 class RequirementsDialog(TemplateDialog):
@@ -3081,13 +3704,17 @@ class RequirementsDialog(TemplateDialog):
                 self.attributes("-topmost", True)
         else:
             idx = 1
-            num = 3
-            #self.info_butt_removed.append(idx_button)
-            if idx_val != 0:
-                for i in range(1, idx_val, 1):
-                    if i not in self.info_val_removed:
-                        num += 4
-            idx_button = num - 3
+            # num = -1
+            # #self.info_butt_removed.append(idx_button)
+            # if idx_val != 0:
+            #     for i in range(1, idx_val, 1):
+            #         if i not in self.info_val_removed:
+            #             num += 4
+            # idx_button = num - 3
+            id_in = len([val for val in self.info_val_removed if val < idx_val])
+            if id_in >0:
+                idx_val = idx_val - id_in
+            idx_button = idx_val*4
             while idx < 5:
                 self.info_button[idx_button].grid_forget()
                 del self.info_button[idx_button]
@@ -3538,41 +4165,256 @@ class Data2ImportTemplate(TemplateDialog):
         self.dev_dict = {}
 
 
+class PipelineDialog(TemplateDialog):
+
+    def __init__(self, parent, bids_dir):
+        self.bids_dir = bids_dir
+        self.pipeline = pip.PipelineSetting(self.bids_dir)
+        self.pipname = ''
+        self.path = ''
+        self.parameters = {}
+        self.arguments_dict = {'unit_value': pip.Arguments.unit_value, 'read_value': pip.Arguments.read_value, 'list_value': pip.Arguments.list_value,
+                               'file_value': pip.Arguments.file_value, 'bool_value': pip.Arguments.bool_value, 'bids_value':pip.Arguments.bids_value}
+        self.arguments_list = list(self.arguments_dict.keys())
+        self.input_list = []
+        self.output_list = []
+        self.arguments_list_selected = []
+        self.log_error = ''
+        self.name_entry = []
+        self.path_entry = []
+        self.boolean = ['MultipleSubjects', 'Optional', 'CombinationMode', 'Directory', 'MultipleSelection', 'InCommandLine', 'ReadBids', 'DerivFolder']
+        super().__init__(parent)
+
+    def body(self, parent):
+        # width = round(self.monitor_width * 9/10)
+        height = round(self.monitor_height * 9 / 10)
+        width = self.monitor_width
+        self.geometry('{}x{}'.format(width, height))
+        smallfont = font.Font(family="Segoe UI", size=9)
+        self.option_add('*Font', smallfont)
+
+        # Frame for the name of the software and general things
+        placement = Frame(parent)
+        toolbar = Frame(placement)
+        Label(toolbar, text='Name', justify='center', font='bold').grid(row=0, column=0)
+        self.name_entry = Entry(toolbar)
+        self.name_entry.grid(row=0, column=1)
+        Label(toolbar, text='Select your software', justify='center', font='bold').grid(row=1, column=0)
+        path_browse = Button(toolbar, text='Path', width=8, command=lambda: self.ask4path())
+        path_browse.grid(row=1, column=1)
+        self.path_entry = Entry(toolbar, text='Path')
+        self.path_entry.grid(row=1, column=2)
+        toolbar.pack(side=LEFT)
+
+        parameterbar = Frame(placement)
+        for cnt, key in enumerate(pip.Parameters.keylist):
+            Label(parameterbar, text=key, justify='center', font='bold').grid(row=cnt, column=0)
+            self.parameters[key] = Entry(parameterbar)
+            self.parameters[key].grid(row=cnt, column=1)
+        parameterbar.pack(side=LEFT)
+        # Frame for the other information
+        parameter_secondary = Frame(parent)
+
+        frame_okcancel = Frame(parent)
+        self.ok_cancel_button(frame_okcancel)
+        # Scrollbar the input's frame
+        self.frame_input = DoubleScrollbarFrame(parameter_secondary)
+        Label(self.frame_input.frame, text='Inputs', justify='center', font='bold').grid(row=0, column=1, columnspan=2)
+        add_input = Button(self.frame_input.frame, text='+',
+                          command=lambda: self.create_frame(self.frame_input, type='Inputs'))
+        add_input.grid(row=0, column=3)
+        self.frame_input.update_scrollbar()
+
+        # Scrollbar the frame with canvas
+        self.frame_output = DoubleScrollbarFrame(parameter_secondary)
+        Label(self.frame_output.frame, text='Outputs', justify='center', font='bold').grid(row=0, column=1, columnspan=2)
+        add_output = Button(self.frame_output.frame, text='+',
+                           command=lambda: self.create_frame(self.frame_output, type='Outputs'))
+        add_output.grid(row=0, column=3)
+        self.frame_output.update_scrollbar()
+
+        # Scrollbar the modality's frame
+        self.frame_arguments = DoubleScrollbarFrame(parameter_secondary)
+        Label(self.frame_arguments.frame, text='Add Parameters',
+              justify='center', font='bold').grid(row=0, column=1)
+        soft_list_button = ttk.Combobox(self.frame_arguments.frame, values=self.arguments_list)
+        soft_list_button.grid(row=0, column=2)
+        add_soft = Button(self.frame_arguments.frame, text='+',
+                          command=lambda: self.create_frame(self.frame_arguments, type=self.arguments_list[
+                                                                                     soft_list_button.current()]))
+        add_soft.grid(row=0, column=3)
+        self.frame_arguments.update_scrollbar()
+
+        self.frame_input.frame.pack(side=LEFT, fill=BOTH, expand=True)
+        self.frame_output.frame.pack(side=LEFT, fill=BOTH, expand=True)
+        self.frame_arguments.frame.pack(side=LEFT, fill=BOTH, expand=True)
+
+        placement.pack(side=TOP)
+        parameter_secondary.pack(side=TOP, fill=BOTH, expand=True)
+        frame_okcancel.pack(side=TOP)
+        self.attributes("-topmost", True)
+
+    def ask4path(self):
+        self.attributes("-topmost", False)
+        self.path = filedialog.askopenfilename(title='Select your pipeline',
+                                                   filetypes=[('exe', "*.exe"), ('Script python', "*.py"),
+                                                              ('Script Matlab', "*.m"), ('Plugin AnyWave', "AnyWave.exe")])
+        self.path_entry.delete(0, END)
+        self.path_entry.insert(END, self.path)
+        self.attributes("-topmost", True)
+
+    def create_frame(self, parent, type):
+        isarg=False
+        if type == 'Outputs' and len(self.output_list) == 1:
+            self.attributes("-topmost", False)
+            messagebox.showinfo('Information', 'You cannot add a new output, the limit is one.')
+            self.attributes("-topmost", True)
+            return
+        frame_parameters = Frame(parent.frame, relief=GROOVE, borderwidth=2)
+        if type == 'Inputs':
+            keylist = pip.InputArguments.keylist + pip.InputArguments.keylist_deriv + pip.InputArguments.keylist_optional
+            list2add = self.input_list
+        elif type == 'Outputs':
+            keylist = pip.Output.keylist
+            list2add = self.output_list
+        else:
+            isarg = True
+            keylist = ['Name'] + self.arguments_dict[type]
+            list2add = self.arguments_list_selected
+
+        new_dict = {}
+        nbr = len(list2add)
+        try:
+            a = 0
+            if isarg:
+                Label(frame_parameters, text=type, fg='#17657D').grid(row=0, column=1)
+                a = 1
+            for cnt, elt in enumerate(keylist):
+                if elt in self.boolean:
+                    new_dict[elt] = BooleanVar()
+                    Label(frame_parameters, text=elt).grid(row=cnt+a, column=0)
+                    l = Checkbutton(frame_parameters, text='True', variable=new_dict[elt])
+                    l.grid(row=cnt+a, column=1, sticky=W + E)
+                else:
+                    new_dict[elt] = StringVar()
+                    Label(frame_parameters, text=elt).grid(row=cnt+a, column=0)
+                    l = Entry(frame_parameters, textvariable=new_dict[elt])
+                    l.delete(0, END)
+                    l.grid(row=cnt+a, column=1, sticky=W + E)
+            list2add.append(new_dict)
+            frame_parameters.grid(row=nbr+1, column=0, columnspan=3)
+            parent.frame.update_idletasks()
+            parent.canvas.config(scrollregion=parent.canvas.bbox("all"))
+        except EOFError as err:
+            messagebox.showerror('ERROR', err)
+            return
+        parent.update_scrollbar()
+
+    def ok(self):
+        if self.name_entry.get():
+            self.pipeline['Name'] = self.name_entry.get()
+        if self.path:
+            self.pipeline['Path'] = self.path
+        for key in self.parameters:
+            if self.parameters[key].get():
+                self.pipeline['Parameters'][key] = self.parameters[key].get()
+        # Get Inputs parameters
+        self.pipeline['Parameters']['Input'] = []
+        for inp in self.input_list:
+            new_inp= {}
+            for key in inp:
+                val = inp[key].get()
+                if key in pip.InputArguments.keylist + pip.InputArguments.keylist_optional:
+                    if isinstance(val, str) and ',' in val:
+                        new_inp[key] = val.split(',')
+                    else:
+                        new_inp[key] = val
+                elif key in pip.InputArguments.keylist_deriv and inp['DerivFolder'].get():
+                    if key == 'DerivFolder':
+                        new_inp[key] = ''
+                    else:
+                        new_inp[key] = inp[key].get()
+            self.pipeline['Parameters']['Input'].append(new_inp)
+        # Get output parameters
+        self.pipeline['Parameters']['Output'] = {}
+        for out in self.output_list:
+            for key in out:
+                val = out[key].get()
+                if isinstance(val, str) and ',' in val:
+                    val = val.replace(', ', ',')
+                    val = val.split(',')
+                self.pipeline['Parameters']['Output'][key] = val
+
+        # Get parameters
+        for par in self.arguments_list_selected:
+            key = par['Name'].get()
+            self.pipeline['Parameters'][key] = {}
+            for clef in par:
+                if clef != 'Name':
+                    val = par[clef].get()
+                    if isinstance(val, str) and ',' in val:
+                        val = val.replace(', ', ',')
+                        val = val.split(',')
+                    self.pipeline['Parameters'][key][clef] = val
+
+        # Write the json
+        self.pipname = self.pipeline['Name'].lower()
+        self.pipeline.write_file(os.path.join(self.pipeline.soft_path, self.pipname + '.json'))
+        if self.parent is not None:
+            self.parent.focus_set()
+        self.destroy()
+
+    def cancel(self):
+        # put focus back to the parent window
+        if self.parent is not None:
+            self.parent.focus_set()
+        self.input_list = []
+        self.output_list = []
+        self.arguments_list_selected = []
+        self.path = ''
+        self.parameters = {}
+        self.log_error = 'The pipeline selection has been cancel.'
+        self.destroy()
+
+
 class HandleMultipleSameProcess(TemplateDialog):
 
-    def __init__(self, parent, deriv_list, similar_process):
+    def __init__(self, parent, deriv_list):
         self.derivatives_dir = os.path.join(parent.curr_bids.dirname, 'derivatives')
         self.derivatives_list = deriv_list
+        self.multi_soft = ['All'] + deriv_list
         self.software_dir = parent.folder_software
-        self.multi_soft = [fold for elt in similar_process for fold in deriv_list if fold.startswith(elt)]
+        #├self.multi_soft = [fold for elt in similar_process for fold in deriv_list if fold.startswith(elt)]
         self.deriv_button = {key: IntVar() for key in self.multi_soft}
         self.display_button = {key: None for key in self.multi_soft}
         super().__init__(parent)
 
     def body(self, parent):
-        self.title('Select the version that should not appear in the statistical table')
+        self.title('Select the analysis that should be included in the statistical table.')
         #self.geometry('1000x800')
         #body_frame = VerticalScrollbarFrame(parent)
         double_frame = Frame(parent)
         double_frame.pack(side=TOP)
-        folder_frame = Frame(double_frame, relief='groove')
-        folder_frame.pack(side=LEFT)
+        folder_frame = VerticalScrollbarFrame(double_frame)
+        folder_frame.frame.pack(side=LEFT)
         display_frame = HorizontalScrollbarFrame(double_frame)
         display_frame.frame.pack(side=LEFT, fill=BOTH, expand=True, anchor='nw')
         okcancel_frame = Frame(parent)
         okcancel_frame.pack(side=BOTTOM)
         cp = 0
         for cnt, key in enumerate(self.deriv_button):
-            l = Checkbutton(folder_frame, text=key,  variable=self.deriv_button[key])
+            l = Checkbutton(folder_frame.frame, text=key,  variable=self.deriv_button[key])
             l.grid(row=cnt+cp+1, column=0)
-            self.display_button[key] = Button(folder_frame, text='display '+key, command=lambda fm=display_frame, dname=key: self.display_dataset(fm, dname))
+            self.display_button[key] = Button(folder_frame.frame, text='display '+key, command=lambda fm=display_frame, dname=key: self.display_dataset(fm, dname))
             self.display_button[key].grid(row=cnt+cp+1, column=1)
             cp += 1
+        folder_frame.update_scrollbar()
         display_frame.update_scrollbar()
         self.ok_cancel_button(okcancel_frame)
         #body_frame.update_scrollbar()
 
     def display_dataset(self, frame2display, deriv_name):
+
         def deletewidgetframe(frame2delete):
             for w in frame2delete.winfo_children():
                 w.destroy()
@@ -3592,12 +4434,16 @@ class HandleMultipleSameProcess(TemplateDialog):
 
     def ok(self):
         self.results = [key for key in self.deriv_button if self.deriv_button[key].get()]
+        if len(self.results) == 1 and self.results[0] == 'All':
+            self.results = self.derivatives_list
         if not self.results:
-            flag = messagebox.askyesno('Warning !!', 'All processing versions will be used to create the statistics table.\nDo you want to continue?')
-            if flag:
-                self.destroy()
-        else:
-            self.destroy()
+            self.results = 'Analysis folders have not been selected, so the statistical table cannot be created.'
+        #     flag = messagebox.askyesno('Warning !!', 'All processing versions will be used to create the statistics table.\nDo you want to continue?')
+        #     if flag:
+        #         self.destroy()
+        # else:
+        #     self.destroy()
+        self.destroy()
 
     def cancel(self):
         self.results = 'Statistic Table Creation has been canceled !!'
@@ -3756,6 +4602,7 @@ def enable(frame, state):
         except:
             pass
 
+
 def enable_frames(frame, button):
     if isinstance(button, int):
         button_value = button
@@ -3819,12 +4666,6 @@ def run_app():
             root.state("zoomed")
         elif platform.system() == 'Linux':
             root.attributes('-zoomed', True)
-    # MyDialog(root)
-    # The following three commands are needed so the window pops
-    # up on top on Windows...
-    # root.iconify()
-    # root.update()
-    # root.deiconify()
     root.mainloop()
 
 if __name__ == '__main__':

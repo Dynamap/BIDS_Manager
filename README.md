@@ -1,10 +1,8 @@
-#  BIDS Manager ![BM](bids_manager/bids_manager.ico "BIDS_Manager")
-Package to collect, organise and manage neuroscience data in Brain Imaging Data Structure (BIDS) format.
+#  BIDS Manager-Pipeline ![BM](bids_manager/bids_manager.ico "BIDS_Manager")
+Package to collect, organise, manage and process neuroscience data in Brain Imaging Data Structure (BIDS) format.
 
 ## Version
-BIDS Manager v0.2.8
-
-This version of BIDS Manager uses a version of BIDS Uploader which does not yet handle data transfer via SFTP, the SFTP transfer will me publicly available soon.
+BIDS Manager v0.3.4 BIDS Manager-Pipeline v1.1.0
 
 ## How to cite
 * Roehri, N., Medina-Villalon, S., Jegou, A., Colombet, B., Giusiano, B., Ponz, A., & Bénar, C. G., Transfer, collection and organisation of electrophysiological and imaging data for multicenter studies. (submitted)
@@ -33,14 +31,18 @@ This version of BIDS Manager uses a version of BIDS Uploader which does not yet 
 * bids-validator
 * nibabel
 * xlrd
+* paramiko
+* tkcalendar
+* pywin32
+* pysimplegui
 
 ## Tutorial video
 A tutorial video explaining you how to convert the example dataset and how to launch analysis is available [HERE](https://www.youtube.com/watch?v=oFFJy5q6e3o)
 
 ## Authors
-* Main developper: Nicolas Roehri <nicolas.roehri@etu.univ-amu.fr>
-* Developpers: Samuel Medina (generic_uploader) <samuel.medinavillalon@gmail.com>, 
-		Aude Jegou <aude.jegou@univ-amu.fr>
+* BIDS Manager developper: Nicolas Roehri <roehri.nicolas@gmail.com>
+* BIDS Manager-Pipeline developper: Aude Jegou <jegou.aude@gmail.com>
+* BIDS Uploader developper: Samuel Medina (generic_uploader) <samuel.medinavillalon@gmail.com>, 
 
 ## License
 This project is licensed under the GPLv3 license.
@@ -48,7 +50,27 @@ This project is licensed under the GPLv3 license.
 ## Comment
 If you wish to compile these scripts using PyInstaller 4.0 or above, use the command below:
 ```
-pyinstaller --onefile --icon=bids_manager\\bids_manager.ico --hidden-import PyQt5.sip bids_manager\\bids_manager.py
+pyinstaller --onefile --icon=bids_manager.ico --hidden-import PyQt5.sip bids_manager\\bids_manager.py
 ```
-An **example dataset** is available here: https://figshare.com/articles/Example_Dataset_for_BIDS_Manager/11687064.
-A  **compiled version** of BIDS Manager-Pipeline for Windows system is available here: https://figshare.com/articles/software/BIDS_Manager-Pipeline/14381624.
+An **example dataset** is available here: https://figshare.com/articles/Example_Dataset_for_BIDS_Manager/11687064
+An **example BIDS dataset** is available here: https://figshare.com/articles/dataset/BIDS_dataset_for_BIDS_Manager-Pipeline/19046345
+
+# BIDS Uploader
+Package to transfer data and prepare them for importation in BIDS Dataset. It can be used in local through BIDS Manager
+or it can be used in sFTP mode to send data to another center.
+
+## sFTP Mode
+To distribute BIDS uploader to different center, you have to compile it with the good information (host(IP), port, ssh key, protocole name, and secret key). These informations have to be filled in the code
+generic_uploader\\generic_uploader.py at the lines 239-249. Then, you can compile it with the command below:
+```
+pyinstaller --onefile --name BIDS_Uploader generic_uploader\\generic_uploader.py
+```
+The executable BIDS_uploader.exe can be distributed to the centers with the following files (stored in "config" folder):
+* config\\requirements.json (Requirements of the BIDS dataset)
+* config\\private_ssh_key
+
+## BIDS Manager-Pipeline
+To test BMP, you can use the AnyWave's plugins (i.e. H2, ICA, spectral, etc) or filter_data in the directory software_test
+
+## Compiled version
+You can download a compile version here: https://figshare.com/articles/software/BIDS_Manager-Pipeline_compiled_verison/19062312

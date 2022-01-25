@@ -1,0 +1,100 @@
+{
+ "Name": "H2",
+ "Path": "",
+ "Parameters": {
+  "Mode": [
+   "automatic"
+  ],
+  "Intermediate": "AnyWave",
+  "Callname": "h2",
+  "algorithm": {
+   "PossibleValue": [
+    "r2",
+    "h2"
+   ],
+   "MultipleSelection": false
+  },
+  "time_window": {
+   "Default": "4",
+   "Unit": "sec"
+  },
+  "max_lag": {
+   "Default": "0.1",
+   "Unit": "sec"
+  },
+  "step": {
+   "Default": "1",
+   "Unit": "sec"
+  },
+  "hp": {
+   "Default": "1",
+   "Unit": "Hz"
+  },
+  "lp": {
+   "Default": "45",
+   "Unit": "Hz"
+  },
+  "downsampling_factor": {
+   "Default": "2",
+   "Unit": "factor"
+  },
+  "marker_file": {
+   "FileLoc": "",
+   "Extension": ".mrk"
+  },
+  "use_markers": {
+   "Read": "*events.tsv",
+   "ElementsToRead": "trial_type",
+   "MultipleSelection": true
+  },
+  "skip_markers": {
+   "Read": "*events.tsv",
+   "ElementsToRead": "trial_type",
+   "MultipleSelection": true
+  },
+  "create_montage": {
+   "PossibleValue": [
+    "bipolar_ieeg",
+    "none"
+   ],
+   "MultipleSelection": false
+  },
+  "montage_file": {
+   "Default": "",
+   "Unit": ""
+  },
+  "skip_bad_channels": {
+   "PossibleValue": [
+    "true",
+    "false",
+    "yes",
+    "no"
+   ],
+   "MultipleSelection": false
+  },
+  "output_file": {
+   "ReadBids": true,
+   "Type": "file"
+  },
+  "Input": [
+   {
+    "Tag": "--input_file",
+    "MultipleSubjects": false,
+    "Modality": [
+     "Ieeg",
+     "Eeg",
+     "Meg"
+    ],
+    "Type": "file",
+    "CombinationMode": false
+   }
+  ],
+  "Output": {
+   "Tag": "--output_dir",
+   "MultipleSubjects": false,
+   "Directory": true,
+   "Type": "",
+   "Extension": ".mat"
+  }
+ }
+}

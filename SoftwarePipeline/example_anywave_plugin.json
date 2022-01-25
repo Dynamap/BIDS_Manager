@@ -8,55 +8,55 @@
   "Intermediate": "AnyWave",
   "Callname": "ica",
   "hp": {
-   "default": "0",
-   "unit": "Hz"
+   "Default": "0",
+   "Unit": "Hz"
   },
   "lp": {
-   "default": "0",
-   "unit": "Hz"
+   "Default": "0",
+   "Unit": "Hz"
   },
   "comp": {
-   "default": "",
-   "unit": "components"
+   "Default": "",
+   "Unit": "components"
   },
   "downsampling": {
-   "default": true,
-   "incommandline": true
+   "Default": true,
+   "InCommandLine": true
   },
   "modality": {
-   "readbids": true,
-   "type": "modality"
+   "ReadBids": true,
+   "Type": "modality"
    },
   "use_markers": {
-   "read": "*.mrk",
+   "Read": "*.mrk",
    "elementstoread": "0",
    "multipleselection": true
   },
   "skip_markers": {
    "read": "*.mrk",
-   "elementstoread": "0",
-   "multipleselection": true
+   "ElementsToRead": "0",
+   "MultipleSelection": true
   },
   "skip_bad": {
-    "default": true,
-    "incommandline": true
+    "Default": true,
+    "InCommandLine": true
   },
   "Input": [
    {
-    "tag": "--input_file",
-	"multiplesubject": false,
-    "modality": [
+    "Tag": "--input_file",
+	"MultipleSubject": false,
+    "Modality": [
      "Ieeg", "Meg", "Eeg"
     ],
-    "type": "file"
+    "Type": "file"
    }
   ],
   "Output": {
-   "tag": "--output_dir",
-   "multiplesubject": false,
-   "directory": true,
-   "type": "",
-   "extension": ".mat"
+   "Tag": "--output_dir",
+   "MultipleSubject": false,
+   "Directory": true,
+   "Type": "",
+   "Extension": ".mat"
   }
  }
 }

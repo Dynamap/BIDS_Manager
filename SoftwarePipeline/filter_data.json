@@ -1,6 +1,6 @@
 {
  "Name": "filter_data",
- "Path": "",
+ "Path": "//dynaserv/home/jegou/Softwares/BMP_paper/software_needed/filter_data.exe",
  "Parameters": {
   "Mode": [
    "automatic"
@@ -8,40 +8,41 @@
   "Callname": "filter_data",
   "Input": [
    {
-    "tag": "input_file",
-    "multiplesubject": false,
-    "modality": [
+    "Tag": "input_file",
+    "MultipleSubjects": false,
+    "Modality": [
      "Ieeg",
      "Eeg"
     ],
-    "type": "file"
+    "Type": "file",
+    "CombinationMode": false
    }
   ],
   "Output": {
-   "tag": "output_directory",
-   "multiplesubject": false,
-   "directory": true,
-   "type": "dir",
-   "extension": []
+   "Tag": "output_directory",
+   "MultipleSubjects": false,
+   "Directory": true,
+   "Type": "dir",
+   "Extension": []
   },
   "low_frequency": {
-   "default": 1,
-   "unit": ""
+   "Default": 1,
+   "Unit": ""
   },
   "high_frequency": {
-   "default": 45,
-   "unit": ""
+   "Default": 45,
+   "Unit": ""
   },
   "filter_type": {
-   "possible_value": [
+   "PossibleValue": [
     "bandpassfir",
     "bandpassiir"
    ],
-   "multipleselection": false
+   "MultipleSelection": false
   },
   "filter_order": {
-   "default": 20,
-   "unit": ""
+   "Default": 20,
+   "Unit": ""
   }
  }
 }

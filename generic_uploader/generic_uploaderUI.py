@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
-#     BIDS Manager collect, organise and manage data in BIDS format.
+
+#     BIDS Uploader collect, creates the data2import requires by BIDS Manager
+#     and transfer data if in sFTP mode.
 #     Copyright © 2018-2020 Aix-Marseille University, INSERM, INS
 #
-#     This file is part of BIDS Manager. It generates the Generic Uploader
-#     interface.
+#     This file is part of BIDS Uploader. It handles the Graphical interface.
 #
 #     BIDS Manager is free software: you can redistribute it and/or modify
 #     it under the terms of the GNU General Public License as published by
@@ -377,5 +378,8 @@ class Ui_MainWindow(object):
                                                 '}')
         self.pushButtonValidation.setText(_translate("MainWindow", "Validate", None))
         self.pushButtonReset.setText(_translate("MainWindow", "Reset", None))
-        self.pushButtonFinish.setText(_translate('MainWindow', 'Finish and Import', None))
+        if self.bids_manager_mode:
+            self.pushButtonFinish.setText(_translate('MainWindow', 'Finish and Import', None))
+        else:
+            self.pushButtonFinish.setText(_translate('MainWindow', 'Finish', None))
 
