@@ -123,12 +123,13 @@ def data_transfert_sftp(host, port, username, private_key_path, password, forlde
             stdin, stdout, stderr = ssh.exec_command(
                 'tar -xf ' + uploaded_folder + separator + folder_filename + separator + folder_filename + ".tar" + " -C " + uploaded_folder + separator + folder_filename)
             message = stderr.readlines()
-            if not message:
+            if not stdout.readlines():      # essai sam car message n'est pas vide, warning about time stamp
                 stdin, stdout, stderr = ssh.exec_command(
                     'rm -r ' + uploaded_folder + separator + folder_filename + separator + folder_filename + ".tar")
                 message = stderr.readlines()
                 shutil.rmtree(forlder2send)
         # =========================================================================
+        e = ''
     except Exception as e:
         print(e)
         try:

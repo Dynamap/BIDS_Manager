@@ -97,7 +97,7 @@ class ModalityGui(QtWidgets.QDialog):
         # add import button
         self.import_button = QtWidgets.QPushButton(self)
         self.import_button.setEnabled(True)
-        self.import_button.setGeometry(QtCore.QRect(inter_element + (nb_by_line-1)
+        self.import_button.setGeometry(QtCore.QRect(inter_element + (nb_by_line - 1)
                                                     * (largeur_des_elements+inter_element),
                                                     ((nb_line-1)*(2*hauteur_des_elements+inter_element))
                                                     + hauteur_des_elements, largeur_des_elements / 2,

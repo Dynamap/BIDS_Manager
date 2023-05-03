@@ -27,10 +27,7 @@ Created on Mon Mar 19 11:19:56 2018
 import sys
 import os
 import shutil
-import hashlib
 import datetime
-import re
-import unicodedata
 import paramiko
 try:
     from PyQt5 import QtGui, QtCore, QtWidgets
@@ -49,46 +46,22 @@ except:
 from generic_uploader.generic_uploaderUI import Ui_MainWindow
 from generic_uploader.validationdialog import Ui_Dialog
 from generic_uploader.micromed import anonymize_micromed
+from generic_uploader.deltamed import anonymize_deltamed
 from generic_uploader.read_seeg_images_header import read_headers
 from generic_uploader.anonymizeDicom import anonymize as anonymize_dcm
 from generic_uploader.anonymize_edf import anonymize_edf
+from generic_uploader.anonymize_nifti import anonymize_nifti
 from bids_manager import ins_bids_class
+# from generic_uploader import ins_bids_class2 as ins_bids_class
 from generic_uploader import patient_requirements_class
 from generic_uploader.modality_gui import ModalityGui
 from generic_uploader.import_by_modality import import_by_modality
 from generic_uploader.empty_room_dialog import EmptyRoomImportDialog
 from generic_uploader.data_transfert import data_transfert_sftp
+from generic_uploader.utils import valide_date, valide_mot, hash_object
 
 if 0:  # Used to compile, otherwise, it crashes
     pass
-
-
-#Put the fonction outside of the classes to call them in other scripts
-def valide_date(d):
-    try:
-        dd = datetime.datetime.strptime(d, '%d/%m/%Y')
-    except:
-        return False
-    else:
-        if (dd < datetime.datetime(year=1800, month=1, day=1)) or (dd > datetime.datetime.now()):
-            return False
-        else:
-            return dd.strftime('%d%m%Y')
-
-
-def valide_mot(mot):
-    nfkd_form = unicodedata.normalize('NFKD', mot)
-    only_ascii = nfkd_form.encode('ASCII', 'ignore')  # supprime les accents et les diacritiques
-    only_ascii_string = only_ascii.decode('ASCII').upper()  # reconvertit les bytes en string
-    only_az = re.sub('[^A-Z]', '', only_ascii_string)  # supprime tout ce qui n'est pas [A-Z]
-    return only_az
-
-
-def hash_object(obj):
-    clef256 = hashlib.sha256(obj.encode())
-    clef_digest = clef256.hexdigest()
-    clef = clef_digest[0:12]
-    return clef
 
 
 class GenericUploader(QtWidgets.QMainWindow, Ui_MainWindow):
@@ -97,6 +70,7 @@ class GenericUploader(QtWidgets.QMainWindow, Ui_MainWindow):
             QtWidgets.QMenu.__init__(self)
             # Creation des actions a effectuer lors du clique droit sur la liste de log
             #   Action de suppresion de l'action
+            #for compilation
             self.delete_action = QtWidgets.QAction("Delete", self)
             self.delete_action.triggered.connect(lambda: self.delete_list_command(papa))
             #   Action de Forcage de l'opération de l'action
@@ -216,7 +190,7 @@ class GenericUploader(QtWidgets.QMainWindow, Ui_MainWindow):
                 papa.flag_validated, papa.current_state = papa.check_total_validation()
                 if papa.flag_validated:
                     upload_dialog = QtWidgets.QMessageBox.question(papa, "Import data ?",
-                                                               "Do you want to copy data ?",
+                                                               "Do you want to copy data?",
                                                                QtWidgets.QMessageBox.Ok | QtWidgets.QMessageBox.Cancel)
                     if upload_dialog == QtWidgets.QMessageBox.Cancel:
                         return
@@ -240,7 +214,8 @@ class GenericUploader(QtWidgets.QMainWindow, Ui_MainWindow):
             else:
                 raise TypeError('The argument should be path or Bids Dataset')
             self.requirements = self.bids_dataset.requirements
-            self.importation_path = os.path.normpath(os.path.join(self.init_path, ".."))  # os.path.join(self.init_path, 'derivatives','bids_uploader')
+            self.importation_path = os.path.join(self.init_path, 'derivatives',
+                                                 'bids_uploader')  # os.path.normpath(os.path.join(self.init_path, ".."))
             os.makedirs(self.importation_path, exist_ok=True)
             #self.bids_requirements_path = os.path.join(self.init_path, "code", "requirements.json")
             dstdesc = self.bids_dataset['DatasetDescJSON']
@@ -264,24 +239,24 @@ class GenericUploader(QtWidgets.QMainWindow, Ui_MainWindow):
             self.bids_dataset = None
             # =========== Elements to change to send your data in sFTP in another center ==========
             #host is the IP adress
-            self.host = ''
+            self.host = 'gitlab-dynamap.timone.univ-amu.fr'
             #port is th sFTP port
             self.port = '22'
-            self.username = ''
+            self.username = 'galvani_ps2'
             #private_key_path is the file with the ssh key. It has to be saved in config folder
-            self.private_key_path = os.path.join(self.init_path, 'config', '')
+            self.private_key_path = os.path.join(self.init_path, 'config', 'ps2_privkey')
             #protocole name is the name appearing in the datset_description of your BIDS dataset
-            protocole_name = ''
+            protocole_name = 'galvani_ps2'
             #secret key is the word used for anonymisation
-            self.secret_key = ''
+            self.secret_key = 'galvani_ps2'
         self.moda_needed = [moda for moda in self.requirements['Requirements'].keys()
                             if moda not in ["Subject"]]
-        # ========================================================================================================== #
+        # ==========================================================================================================
         self.setupUi(self)
         self.progressBar.setVisible(False)
         self.progressBar.setValue(0)
-        self.generic_uploader_version = str(1.1)
-        self.setWindowTitle("BIDSUploader v" + self.generic_uploader_version)
+        self.generic_uploader_version = str(1.2)
+        self.setWindowTitle("BIDSUploader_" + protocole_name + "_v" + self.generic_uploader_version)
         self.MenuList = self.ListMenuObject(self)
         self.listWidget.clear()
         self.current_working_path = self.init_path
@@ -348,7 +323,7 @@ class GenericUploader(QtWidgets.QMainWindow, Ui_MainWindow):
                 ssh.connect(self.host, self.port, self.username, pkey=key)
                 ssh.close()
             except Exception as e:
-                #QtWidgets.QMessageBox.critical(self, "connection error", str(e))
+                QtWidgets.QMessageBox.critical(self, "connection error", str(e))
                 exit()
 
     def interactions_callbacks(self):
@@ -398,10 +373,6 @@ class GenericUploader(QtWidgets.QMainWindow, Ui_MainWindow):
                     key_list = mod.keys()
                     non_empty_keys = [item for item in key_list if (mod[item] and item not in ["sub", "fileLoc"])]
                     description = ""
-                    '''if sub[key_class].index(mod):
-                        curr_state = self.old_maplist[sub[key_class].index(mod)]["curr_state"]
-                    else:
-                        curr_state = "invalid"'''
                     # code pour remplir la liste lisiblement :
                     for key in non_empty_keys:
                         description = description + mod[key] + "_"
@@ -488,73 +459,73 @@ class GenericUploader(QtWidgets.QMainWindow, Ui_MainWindow):
             return sub
 
     def list_item_right_clicked(self, qpos):
-            QPoint = QtGui.QCursor.pos()
-            if self.listWidget.currentItem() is None:
-                return 0
-            force_action = [action for action in self.MenuList.actions() if action == self.MenuList.force_action]
-            check_and_force = [action for action in self.MenuList.actions() if
-                               action == self.MenuList.check_and_force_action]
-            modify_identity = [action for action in self.MenuList.actions() if
-                               action == self.MenuList.modify_identity]
-            delete_action = [action for action in self.MenuList.actions() if action == self.MenuList.delete_action]
-            modify_info_action = [action for action in self.MenuList.actions() if action == self.MenuList.modify_info_action]
-            self.MenuList.addAction(self.MenuList.force_action)
-            self.MenuList.addAction(self.MenuList.modify_identity)
-            self.MenuList.addAction(self.MenuList.check_and_force_action)
-            self.MenuList.addAction(self.MenuList.delete_action)
-            self.MenuList.addAction(self.MenuList.modify_info_action)
-            if self.maplist[self.listWidget.currentRow()]["Modality"] == "":
-                if "ID" in self.maplist[self.listWidget.currentRow()]:
-                    self.MenuList.force_action.setVisible(False)
-                    self.MenuList.check_and_force_action.setVisible(False)
-                    self.MenuList.delete_action.setVisible(False)
-                    self.MenuList.modify_identity.setVisible(True)
-                    self.MenuList.modify_info_action.setVisible(True)
-                else:
-                    self.MenuList.force_action.setVisible(False)
-                    self.MenuList.check_and_force_action.setVisible(False)
-                    self.MenuList.delete_action.setVisible(True)
-                    self.MenuList.modify_identity.setVisible(False)
-            #elif self.maplist[self.listWidget.currentRow()]["Modality"] == "Anat" or \
-            #        self.maplist[self.listWidget.currentRow()]["Modality"] == "Dwi":
-            elif self.maplist[self.listWidget.currentRow()]["Modality"] not in ins_bids_class.GlobalSidecars.get_list_subclasses_names():
-                tmp_modality = getattr(ins_bids_class, self.maplist[self.listWidget.currentRow()]["Modality"])()
-                # if self.maplist[self.listWidget.currentRow()]["Modality"] in ["Anat", "Func", "Dwi"]:
-                if isinstance(tmp_modality, ins_bids_class.Imaging):
-                    if len(force_action) > 1:
-                        return 0
-                    sub = self.Subject
-                    if sub[self.maplist[self.listWidget.currentRow()]["Modality"]][
-                           self.maplist[self.listWidget.currentRow()]["Index"]]["modality"]:
-                        self.MenuList.force_action.setVisible(False)
-                        self.MenuList.check_and_force_action.setVisible(True)
-                        self.MenuList.delete_action.setVisible(True)
-                        self.MenuList.modify_identity.setVisible(False)
-                        self.MenuList.modify_info_action.setVisible(False)
-                    else:
-                        self.MenuList.force_action.setVisible(True)
-                        self.MenuList.check_and_force_action.setVisible(False)
-                        self.MenuList.delete_action.setVisible(True)
-                        self.MenuList.modify_identity.setVisible(False)
-                        self.MenuList.modify_info_action.setVisible(False)
-                # elif self.maplist[self.listWidget.currentRow()]["Modality"] == "Ieeg":
-                elif isinstance(tmp_modality, ins_bids_class.Electrophy):
-                    if len(force_action) > 1:
-                        return 0
+        QPoint = QtGui.QCursor.pos()
+        if self.listWidget.currentItem() is None:
+            return 0
+        force_action = [action for action in self.MenuList.actions() if action == self.MenuList.force_action]
+        check_and_force = [action for action in self.MenuList.actions() if
+                            action == self.MenuList.check_and_force_action]
+        modify_identity = [action for action in self.MenuList.actions() if
+                            action == self.MenuList.modify_identity]
+        delete_action = [action for action in self.MenuList.actions() if action == self.MenuList.delete_action]
+        modify_info_action = [action for action in self.MenuList.actions() if action == self.MenuList.modify_info_action]
+        self.MenuList.addAction(self.MenuList.force_action)
+        self.MenuList.addAction(self.MenuList.modify_identity)
+        self.MenuList.addAction(self.MenuList.check_and_force_action)
+        self.MenuList.addAction(self.MenuList.delete_action)
+        self.MenuList.addAction(self.MenuList.modify_info_action)
+        if self.maplist[self.listWidget.currentRow()]["Modality"] == "":
+            if "ID" in self.maplist[self.listWidget.currentRow()]:
+                self.MenuList.force_action.setVisible(False)
+                self.MenuList.check_and_force_action.setVisible(False)
+                self.MenuList.delete_action.setVisible(False)
+                self.MenuList.modify_identity.setVisible(True)
+                self.MenuList.modify_info_action.setVisible(True)
+            else:
+                self.MenuList.force_action.setVisible(False)
+                self.MenuList.check_and_force_action.setVisible(False)
+                self.MenuList.delete_action.setVisible(True)
+                self.MenuList.modify_identity.setVisible(False)
+        #elif self.maplist[self.listWidget.currentRow()]["Modality"] == "Anat" or \
+        #        self.maplist[self.listWidget.currentRow()]["Modality"] == "Dwi":
+        elif self.maplist[self.listWidget.currentRow()]["Modality"] not in ins_bids_class.GlobalSidecars.get_list_subclasses_names():
+            tmp_modality = getattr(ins_bids_class, self.maplist[self.listWidget.currentRow()]["Modality"])()
+            # if self.maplist[self.listWidget.currentRow()]["Modality"] in ["Anat", "Func", "Dwi"]:
+            if isinstance(tmp_modality, ins_bids_class.Imaging):
+                if len(force_action) > 1:
+                    return 0
+                sub = self.Subject
+                if sub[self.maplist[self.listWidget.currentRow()]["Modality"]][
+                        self.maplist[self.listWidget.currentRow()]["Index"]]["modality"]:
                     self.MenuList.force_action.setVisible(False)
                     self.MenuList.check_and_force_action.setVisible(True)
                     self.MenuList.delete_action.setVisible(True)
                     self.MenuList.modify_identity.setVisible(False)
                     self.MenuList.modify_info_action.setVisible(False)
-            else:
-                self.MenuList.force_action.setVisible(True)
-                self.MenuList.check_and_force_action.setVisible(False)
+                else:
+                    self.MenuList.force_action.setVisible(True)
+                    self.MenuList.check_and_force_action.setVisible(False)
+                    self.MenuList.delete_action.setVisible(True)
+                    self.MenuList.modify_identity.setVisible(False)
+                    self.MenuList.modify_info_action.setVisible(False)
+            # elif self.maplist[self.listWidget.currentRow()]["Modality"] == "Ieeg":
+            elif isinstance(tmp_modality, ins_bids_class.Electrophy):
+                if len(force_action) > 1:
+                    return 0
+                self.MenuList.force_action.setVisible(False)
+                self.MenuList.check_and_force_action.setVisible(True)
                 self.MenuList.delete_action.setVisible(True)
                 self.MenuList.modify_identity.setVisible(False)
                 self.MenuList.modify_info_action.setVisible(False)
-            # self.MenuList.move(self.listWidget.mapToGlobal(qpos))
-            self.MenuList.move(QPoint)
-            self.MenuList.show()
+        else:
+            self.MenuList.force_action.setVisible(True)
+            self.MenuList.check_and_force_action.setVisible(False)
+            self.MenuList.delete_action.setVisible(True)
+            self.MenuList.modify_identity.setVisible(False)
+            self.MenuList.modify_info_action.setVisible(False)
+        # self.MenuList.move(self.listWidget.mapToGlobal(qpos))
+        self.MenuList.move(QPoint)
+        self.MenuList.show()
 
     def restart_groupbox_identite(self):
         self.groupBox_identite.setEnabled(True)
@@ -825,7 +796,11 @@ class GenericUploader(QtWidgets.QMainWindow, Ui_MainWindow):
                 if key != "modality":
                     items = self.requirements['Requirements'][modality_class]['keys'][key]
                     keys_dict[key] = items
-            modality_list = modality_list + (eval("ins_bids_class." + modality_class + ".allowed_modalities"))
+            # modif sam pour test generic GUI
+            try:
+                modality_list = modality_list + (eval("ins_bids_class." + modality_class + ".allowed_modalities"))
+            except:
+                modality_list = modality_list + [modality_class]
             keys_dict['modality'] = modality_list
         # ses_list = list(set(ses_list))
         ses_list.sort()
@@ -1008,9 +983,9 @@ class GenericUploader(QtWidgets.QMainWindow, Ui_MainWindow):
                 if nom == prenom == date == 0:
                     return 0, ""
                 birthdate = self.birth_date_str[0:2] + self.birth_date_str[3:5] + self.birth_date_str[6:10]
-                if nom.lower().rstrip('\x00') != str(self.TextName.toPlainText()).lower() or prenom.lower().rstrip(
-                                      '\x00') \
-                                      != str(self.TextPrenom.toPlainText()).lower() or date.lower() != birthdate:
+                if (nom.lower().rstrip('\x00') != str(self.TextName.toPlainText()).lower() and nom.lower().rstrip('\x00') != '') \
+                    or (prenom.lower().rstrip('\x00') != str(self.TextPrenom.toPlainText()).lower() and prenom.lower().rstrip('\x00') != '') \
+                    or (date.lower() != birthdate and date not in ['1111111', '']):
                     self.listWidget.item(action_number).setForeground(QtGui.QColor("red"))
                     self.listWidget.item(action_number).setText(self.listWidget.item(
                         action_number).text() + " => given identity and informations in files are different !")
@@ -1042,7 +1017,7 @@ class GenericUploader(QtWidgets.QMainWindow, Ui_MainWindow):
                 continue'''
             if line["Modality"] == "" and "ID" in line:
                 cur_state = validation_information(self.Subject, line, action)
-            elif line["Modality"] == "IeegGlobalSidecars":
+            elif line["Modality"] == "IeegGlobalSidecars" or line["Modality"] == "EegGlobalSidecars":
                 cur_state = validation_implantation(self.Subject, line, action)
             elif line["Modality"] not in ins_bids_class.GlobalSidecars.get_list_subclasses_names():
                 tmp_modality = getattr(ins_bids_class, line["Modality"])()
@@ -1123,32 +1098,42 @@ class GenericUploader(QtWidgets.QMainWindow, Ui_MainWindow):
             return dest_filename, dest4data2import
 
         def anonymize(classe, dest_filename, sub_id):
+            anonymized=False
             filename, file_extension = os.path.splitext(src_path)
-            if classe == "Ieeg":
+            if classe in ins_bids_class.Electrophy.get_list_subclasses_names():
                 try:
                     file_extension = file_extension.lower()
                     if file_extension == ".trc":
                         anonymize_micromed(dest_filename)
+                    elif file_extension == ".eeg":
+                        anonymize_deltamed(dest_filename)
                     elif file_extension == ".edf":
                         anonymize_edf(dest_filename)
                     else:
-                        QtWidgets.qApp.processEvents()
-                        qmesbox = QtWidgets.QMessageBox(self)
-                        qmesbox.setText("Anonymization cannot be applied on the file format " + file_extension + " because the file doesn't contains patient information.")
-                        qmesbox.exec_()
+                        return anonymized
+
                 except Exception as e:
                     QtWidgets.qApp.processEvents()
                     qmesbox = QtWidgets.QMessageBox(self)
                     qmesbox.setText("anonymization failed. " + str(e))
                     qmesbox.exec_()
-                    return
-            elif classe in ["Anat", "Dwi", "Func"]:
-                try:
-                    anonymize_dcm(dest_filename, dest_filename, sub_id, sub_id, True, False)
-                except :
-                    print('')
+                    return anonymized
+            elif classe in ins_bids_class.Imaging.get_list_subclasses_names():
+                file_extension = file_extension.lower()
+                if file_extension == ".nii":
+                    anonymize_nifti(dest_filename)
+                else:
+                    try:
+                        anonymize_dcm(dest_filename, dest_filename, sub_id, sub_id, True, False)
+                    except :
+                        print('')
+
+            anonymized = True
+            return anonymized
 
         def local_copy_and_anonymization(file_class, src, dest, sub_id, *modality):
+            # list of extensions
+            not_anonymized_files=[]
             if os.path.isdir(src):
                 for files in os.listdir(src):
                     try:
@@ -1156,23 +1141,35 @@ class GenericUploader(QtWidgets.QMainWindow, Ui_MainWindow):
                             new_dest = os.path.join(dest, files)
                             new_src = os.path.join(src, files)
                             os.mkdir(new_dest)
-                            local_copy_and_anonymization(file_class, new_src, new_dest, sub_id, modality[0])
+                            not_anonymized_files.extend(local_copy_and_anonymization(file_class, new_src, new_dest, sub_id, modality[0]))
                             if not os.listdir(new_dest):
                                 shutil.rmtree(new_dest)
                         else:
-
                             shutil.copy2(os.path.join(src, files), dest)
                             if self.anonymize_patient_checkBox.isChecked():
-                                anonymize(file_class, os.path.join(dest, files), sub_id)
+                                anonymized=anonymize(file_class, os.path.join(dest, files), sub_id)
+                                if not anonymized:
+                                    filename, file_extension = os.path.splitext(src_path)
+                                    if file_extension=='':
+                                        file_extension=' '
+                                        
+                                    not_anonymized_files.append("\'"+file_extension+"\'")
+
                     except Exception as e:
                         w = QtWidgets.QWidget(self)
-                        QtWidgets.QMessageBox.critical(w, "Erreur", "Incorrect File format. " + str(e))
-                        return
+                        QtWidgets.QMessageBox.critical(w, "Error", "Incorrect File format. " + str(e))
+                        return not_anonymized_files
             else:
                 shutil.copy2(src, dest)
                 if self.anonymize_patient_checkBox.isChecked():
                     if modality[0]:
                         anonymize(file_class, os.path.join(dest), sub_id)
+
+
+            return not_anonymized_files
+
+
+
 
         counter = 0
         self.disable_gui()
@@ -1193,6 +1190,7 @@ class GenericUploader(QtWidgets.QMainWindow, Ui_MainWindow):
             return
         temp_patient_path = self.creation_repertoire_temporaire()
         self.temp_patient_path = temp_patient_path
+        not_anonymized_files=[]
         for item in self.maplist:
             if counter == 0:
                 counter += 1
@@ -1209,33 +1207,45 @@ class GenericUploader(QtWidgets.QMainWindow, Ui_MainWindow):
                     src_path = item["Addi_file_path"]
                 elif "fiche_patient" in item:
                     src_path = item["fiche_patient"]
+
+            
             temp_folder = temp_patient_path
             dest_path, dest4data2import = dest_path_fonction(self.Subject, item, src_path, temp_folder)
             if classe:
                 filename, file_ext = os.path.splitext(src_path)
-                if file_ext == '.vhdr' and (os.path.isfile(filename + '.dat') or os.path.isfile(filename + '.eeg')) \
-                        and os.path.isfile(filename + '.vmrk'):
-                    local_copy_and_anonymization(classe, src_path, dest_path, self.Subject["sub"],
-                                                 self.Subject[classe][item["Index"]]["modality"])
-                    src = filename + '.vmrk'
-                    vmrk_name = os.path.split(filename)[1] + '.vmrk'
-                    dest_path_vmrk = os.path.split(dest_path)
-                    dest_path_vmrk = os.path.join(dest_path_vmrk[0], vmrk_name)
-                    local_copy_and_anonymization(classe, src, dest_path_vmrk, self.Subject["sub"],
-                                                 self.Subject[classe][item["Index"]]["modality"])
-                    if os.path.isfile(filename + '.dat'):
-                        dat_name = os.path.split(filename)[1] + '.dat'
-                        src = filename + '.dat'
-                    elif os.path.isfile(filename + '.eeg'):
-                        dat_name = os.path.split(filename)[1] + '.eeg'
-                        src = filename + '.eeg'
-                    dest_path_dat = os.path.split(dest_path)
-                    dest_path_dat = os.path.join(dest_path_dat[0], dat_name)
-                    local_copy_and_anonymization(classe, src, dest_path_dat, self.Subject["sub"],
-                                                 self.Subject[classe][item["Index"]]["modality"])
+                if file_ext == '.vhdr' and (os.path.isfile(filename + '.dat') or os.path.isfile(filename + '.eeg')):
+                    not_anonymized_files.extend(local_copy_and_anonymization(classe, src_path, dest_path, self.Subject["sub"],
+                                                 self.Subject[classe][item["Index"]]["modality"]))
+                    for ext in ['.vmrk', '.eeg', '.dat']:
+                        if os.path.exists(filename+ext):
+                            src = filename + ext
+                            vmrk_name = os.path.split(filename)[1] + ext
+                            dest_path_vmrk = os.path.split(dest_path)
+                            dest_path_vmrk = os.path.join(dest_path_vmrk[0], vmrk_name)
+                            not_anonymized_files.extend(local_copy_and_anonymization(classe, src, dest_path_vmrk, self.Subject["sub"],
+                                                         self.Subject[classe][item["Index"]]["modality"]))
+                elif file_ext == '.ades':
+                    not_anonymized_files.extend(local_copy_and_anonymization(classe, src_path, dest_path, self.Subject["sub"],
+                                                 self.Subject[classe][item["Index"]]["modality"]))
+                    for ext in ['.dat']:
+                        if os.path.exists(filename + ext):
+                            src = filename + ext
+                            dat_name = os.path.split(filename)[1] + ext
+                            dest_path_dat = os.path.split(dest_path)
+                            dest_path_dat = os.path.join(dest_path_dat[0], dat_name)
+                            not_anonymized_files.extend(local_copy_and_anonymization(classe, src, dest_path_dat, self.Subject["sub"],
+                                                         self.Subject[classe][item["Index"]]["modality"]))
                 else:
-                    local_copy_and_anonymization(classe, src_path, dest_path, self.Subject["sub"],
-                                                 self.Subject[classe][item["Index"]]["modality"])
+                    not_anonymized_files.extend(local_copy_and_anonymization(classe, src_path, dest_path, self.Subject["sub"],
+                                                 self.Subject[classe][item["Index"]]["modality"]))
+                for ext in ['.mrk', '.bad']:
+                    if os.path.exists(filename+ext):
+                        src = filename + ext
+                        dat_name = os.path.split(filename)[1] + ext
+                        dest_path_dat = os.path.split(dest_path)
+                        dest_path_dat = os.path.join(dest_path_dat[0], dat_name)
+                        not_anonymized_files.extend(local_copy_and_anonymization(classe, src, dest_path_dat, self.Subject["sub"],
+                                                     self.Subject[classe][item["Index"]]["modality"]))
                 ins_bids_class.Data2Import._assign_import_dir(temp_patient_path)
                 if self.SubjectEmpty and item["Modality"] == 'Meg':
                     for elt in self.SubjectEmpty['Meg']:
@@ -1243,10 +1253,27 @@ class GenericUploader(QtWidgets.QMainWindow, Ui_MainWindow):
                             elt['fileLoc'] = dest4data2import
                 self.Subject[item["Modality"]][item["Index"]]["fileLoc"] = dest4data2import
             else:
-                local_copy_and_anonymization(classe, src_path, dest_path, self.Subject["sub"], "")
+                not_anonymized_files.extend(local_copy_and_anonymization(classe, src_path, dest_path, self.Subject["sub"], ""))
             counter += 1
             self.progressBar.setValue(round(counter * 100 / self.maplist.__len__()))
             QtWidgets.qApp.processEvents()
+
+
+        if len(not_anonymized_files) != 0:
+            QtWidgets.qApp.processEvents()
+            qmesbox = QtWidgets.QMessageBox(self)
+            not_anonymized_files=set(not_anonymized_files)
+            if len(not_anonymized_files) == 1:
+                qmesbox.setText("WARNING: Anonymization cannot be applied on the file format listed below because the " \
+                                "file doesn't contain patient information (P.S. This is expected for MEG files):" \
+                                + ' '.join(not_anonymized_files))
+            else:
+                qmesbox.setText( "WARNING: Anonymization cannot be applied on the file formats listed below because the" \
+                                  " files don't contain patient information (P.S. This is expected for MEG files):" \
+                                  + ','.join(not_anonymized_files))
+            qmesbox.exec_()
+
+
         # creation du data2import
         ins_bids_class.Data2Import._assign_import_dir(temp_patient_path)
         data_to_import = ins_bids_class.Data2Import(temp_patient_path)
@@ -1264,9 +1291,14 @@ class GenericUploader(QtWidgets.QMainWindow, Ui_MainWindow):
         data_to_import.save_as_json()
         # AJOUTER ICI LE TRANSFERT PAR SFTP
         if not self.bids_manager_mode:
-            data_transfert_sftp(self.host, self.port, self.username, self.private_key_path, '',
+            e = data_transfert_sftp(self.host, self.port, self.username, self.private_key_path, '',
                             temp_patient_path, 'uploader_folder')
+        else:
+            e = ''
         # ====================================================
+        if e:
+            QtWidgets.QMessageBox.critical(self, "error", str(e))
+            return 0
         # rajouter ici la RAZ GUI
         self.progressBar.setValue(0)
         self.progressBar.setVisible(False)

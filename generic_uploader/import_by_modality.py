@@ -23,8 +23,11 @@
 
 from PyQt5 import QtWidgets
 import os
+import platform
 from bids_manager import ins_bids_class
+# from generic_uploader import ins_bids_class2 as ins_bids_class
 from generic_uploader.meg_import_dialog import MegImportDialog
+from generic_uploader.anat_import_dialog import AnatImportDialog
 
 
 def find_run_nb(subject_modality, items_list, bids_dataset):
@@ -62,6 +65,9 @@ def find_run_nb(subject_modality, items_list, bids_dataset):
 
 
 def import_by_modality(main_window, modality_class, modality_gui, subject):
+    open_file_options = dict()
+    if platform.system() == 'Linux':
+        open_file_options = {'options': QtWidgets.QFileDialog.DontUseNativeDialog}  # Known issue with PyQt5, extensions are case sensitive with native QFileDialog
     bids_dataset = main_window.bids_dataset
     key_list = [str(modality_gui.combobox_list[idx].objectName()) for idx in range(0, len(modality_gui.combobox_list))]
     keys_dict = {}
@@ -71,8 +77,22 @@ def import_by_modality(main_window, modality_class, modality_gui, subject):
     if modality_class not in ins_bids_class.GlobalSidecars.get_list_subclasses_names():
         tmp_modality = getattr(ins_bids_class, modality_class)()
         if isinstance(tmp_modality, ins_bids_class.Imaging):
-            imagery_folder = QtWidgets.QFileDialog.getExistingDirectory(None, "Choose neuroimagery folder to import",
-                                                                    main_window.last_path)
+            files_type_allowed = tmp_modality.readable_file_formats
+            extenstion_allowed = '*' + ' *'.join(files_type_allowed)
+            imaging_import_dialog = AnatImportDialog()
+            res = imaging_import_dialog.exec_()
+            if res == 0:
+                return 0
+            else:
+                if imaging_import_dialog.flag_import == "Nifti file":
+                    imported_name = QtWidgets.QFileDialog.getOpenFileName(None, "Select Nifti file",
+                                                                           main_window.last_path, extenstion_allowed)
+                    main_window.last_path = os.path.dirname(str(imported_name[0]))
+                    imagery_folder = imported_name[0]  # to go from tupple to list
+                elif imaging_import_dialog.flag_import == "Dicom Folder":
+                    imagery_folder = QtWidgets.QFileDialog.getExistingDirectory(None, "Select Dicom folder",
+                                                                               main_window.last_path)
+                    main_window.last_path = imagery_folder
             if imagery_folder == "":
                 return 0, 0
             subject[modality_class] = eval("ins_bids_class." + modality_class + "()")
@@ -84,15 +104,13 @@ def import_by_modality(main_window, modality_class, modality_gui, subject):
             # gérer le run ici
             run_nb = find_run_nb(subject[modality_class], items_list, bids_dataset)
             subject[modality_class][-1].update({'run': str(run_nb)})
-            main_window.last_path = imagery_folder
-    # elif modality_class in ["Ieeg", "Meg", "Eeg", "IeegGlobalSidecars"]:
         elif isinstance(tmp_modality, ins_bids_class.Electrophy):
         # files_type_allowed = "(*.trc *.eeg *.vhdr *.vmrk *.dat *.jpg *.png *.edf *.ctf *.fif)"
             files_type_allowed = tmp_modality.readable_file_formats
             extenstion_allowed = '*' + ' *'.join(files_type_allowed)
             if tmp_modality.classname() is not "Meg":
                 imported_name = QtWidgets.QFileDialog.getOpenFileNames(None, "Select one or more files",
-                                                               main_window.last_path, extenstion_allowed)
+                                                                       main_window.last_path, extenstion_allowed, **open_file_options)
                 # SEEG part
                 if not imported_name[0]:
                     return 0, 0
@@ -143,7 +161,7 @@ def import_by_modality(main_window, modality_class, modality_gui, subject):
                 else:
                     if meg_import_dialog.flag_import == "files":
                         imported_name = QtWidgets.QFileDialog.getOpenFileNames(None, "Select one or more files",
-                                                                           main_window.last_path, extenstion_allowed)
+                                                                           main_window.last_path, extenstion_allowed, **open_file_options)
                         main_window.last_path = os.path.dirname(str(imported_name[0]))
                         # car il peut y avoir plusieurs fichier !!
                         main_window.last_path = os.path.dirname(str(imported_name[0]))
@@ -210,11 +228,13 @@ def import_by_modality(main_window, modality_class, modality_gui, subject):
                 extenstion_allowed = '*' + ' *'.join(files_type_allowed)
             elif keys_dict["modality"] == "electrodes":
                 extenstion_allowed = "*.tsv"
+            elif keys_dict["modality"] == 'blood':
+                extenstion_allowed = "(*.json *.tsv)"
         # else:                     # mettre une erreur ici
         #     files_type_allowed = getattr(ins_bids_class, modality_class).allowed_file_formats
         #     extenstion_allowed = '*' + ' *'.join(files_type_allowed)
         imported_name = QtWidgets.QFileDialog.getOpenFileNames(None, "Select one or more files",
-                                                           main_window.last_path, extenstion_allowed)
+                                                           main_window.last_path, extenstion_allowed, **open_file_options)
         imported_name = imported_name[0] # to manage pyqt5 and tuple from QtWidgets.openfile
         if not imported_name:
             return 0, 0

@@ -53,7 +53,7 @@ class Ui_MainWindow(object):
         #Aude: Determine the size of the monitor and do everything according to it
         if sizeObject.width() > 800 and sizeObject.width() < 2000:
             mainwidth = round((sizeObject.width()*3)/4)
-        elif sizeObject.width() > 2000:
+        elif  sizeObject.width() > 2000:
             mainwidth = round((sizeObject.width() * 2) / 4)
         else:
             mainwidth = sizeObject.width()
@@ -378,5 +378,8 @@ class Ui_MainWindow(object):
                                                 '}')
         self.pushButtonValidation.setText(_translate("MainWindow", "Validate", None))
         self.pushButtonReset.setText(_translate("MainWindow", "Reset", None))
-        self.pushButtonFinish.setText(_translate('MainWindow', 'Finish and Import', None))
+        if self.bids_manager_mode:
+            self.pushButtonFinish.setText(_translate('MainWindow', 'Finish and Import', None))
+        else:
+            self.pushButtonFinish.setText(_translate('MainWindow', 'Finish', None))
 

@@ -1,0 +1,1 @@
+pyinstaller --onefile --name BIDS_Uploader_opstimvag generic_uploader\\generic_uploader.py

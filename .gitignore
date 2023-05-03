@@ -1,4 +1,4 @@
-# Distribution / packaging
+# Distribution / packaging / environment
 .Python
 env/
 build/
@@ -16,6 +16,11 @@ var/
 .installed.cfg
 *.egg
 .idea/
+.env
+.vscode/
+.venv/
+Pipfile
+Pipfile.lock
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -28,3 +33,7 @@ generic_uploader/__pycache__/
 
 # other stuff:
 *.log
+dicm2nii.log
+app.log
+derivatives
+
