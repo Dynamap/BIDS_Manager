@@ -7,7 +7,7 @@ Package to collect, organise, manage, and analyse neuroscience data in Brain Ima
 BIDS Manager version 1.4.3
 
 ## Compiled version
-You can download a compiled version [here](https://github.com/Dynamap/BIDS_Manager/releases/download/v1.4.3/bids_manager_1.4.3.zip) 
+You can download a compiled version from [here](https://github.com/Dynamap/BIDS_Manager/releases/download/v1.4.3/bids_manager_1.4.3.zip).
 
 ## Features
 * Collect data in differents format:
