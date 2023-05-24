@@ -567,7 +567,7 @@ class BidsManager(Frame, object):
                                      )
                 ex_msg = self.create_error_msg(ex)
                 self.update_text(ex_msg)
-                #self.banner_label._default = 'Please set/create a Bids directory'
+                # self.banner_label._default = 'Please set/create a Bids directory'
                 self.change_menu_state(self.uploader_menu, state=DISABLED)
                 self.change_menu_state(self.issue_menu, state=DISABLED)
                 return
@@ -1130,7 +1130,7 @@ class BidsManager(Frame, object):
                 else:
                     issue_list2write.append('sub-' + issue['sub'] + ' : ' + os.path.basename(
                         issue['path']) + ' : ' + os.path.basename(issue['fileLoc']) + ' file is ' + issue['state'])
-                    #issue_list2write.append('File: ' + os.path.basename(issue['fileLoc']) + ' is ' + issue['state'])
+                    # issue_list2write.append('File: ' + os.path.basename(issue['fileLoc']) + ' is ' + issue['state'])
                 act_str = issue.formatting(comment_type='Action')
 
                 if act_str:
@@ -1250,7 +1250,7 @@ class BidsManager(Frame, object):
             else:
                 dirname_dest = os.path.join(
                     self.curr_bids.dirname, 'derivatives', 'anywave', 'common')
-            #self.results = {key: {'input_param': {}, 'analysis_param': {}, 'subject_selected': [], 'derivatives_output': '', 'local_output':''} for key in self.parameter_list}
+            # self.results = {key: {'input_param': {}, 'analysis_param': {}, 'subject_selected': [], 'derivatives_output': '', 'local_output':''} for key in self.parameter_list}
             if output_dict.results:
                 sublist = output_dict.results['0_Files2Copy']['subject_selected']
                 mod = output_dict.results['0_Files2Copy']['analysis_param']['Modality']
@@ -1358,7 +1358,7 @@ class BidsManager(Frame, object):
             self.update_text('BIDS uploader crashed')
             self.make_available()
             return
-        #dirname = os.path.dirname(self.curr_bids.dirname)
+        # dirname = os.path.dirname(self.curr_bids.dirname)
         self.upload_dir = os.path.join(
             self.curr_bids.dirname, 'derivatives', 'bids_uploader', 'TempFolder4Upload')
         if not os.path.exists(self.upload_dir):
@@ -1404,7 +1404,7 @@ class BidsManager(Frame, object):
                 self.upload_dir = None
                 self.curr_data2import = None
             elif not self.curr_data2import['DatasetDescJSON']['Name'] == self.curr_bids['DatasetDescJSON']['Name']:
-                #log_error = 'The upload directory {} doesn"t have the same protocol name of your BIDS dataset so it won"t be import.'.format(upload_dir)
+                # log_error = 'The upload directory {} doesn"t have the same protocol name of your BIDS dataset so it won"t be import.'.format(upload_dir)
                 self.upload_dir = None
                 self.curr_data2import = None
             else:
@@ -1490,7 +1490,7 @@ class BidsManager(Frame, object):
                 self.curr_bids.access.free_token(
                     'analyse_data', bids.BidsBrick.curr_user)
                 self.update_text(output_dict.log_error)
-                #perm, users, info = self.curr_bids.access.use_token_analyse(bids.BidsBrick.curr_user)
+                # perm, users, info = self.curr_bids.access.use_token_analyse(bids.BidsBrick.curr_user)
                 self.make_available()
                 return
             # save batch and possibility to upload it in the GUI
@@ -2144,7 +2144,7 @@ class BidsTSVDialog(TemplateDialog):
                         disabl = None
 
     def modify_participants_tsv(self, lin, ev=None):
-        #line = line.num
+        # line = line.num
         req_keys_idx = [self.main_brick[0].index(key) for key in self.main_brick[0] if key in bids.Subject.required_keys or key.endswith(
             '_integrity') or key.endswith('_ready')]
         modification = ModifDialog(self, self.table2show[lin], req_keys_idx)
@@ -3439,7 +3439,7 @@ class BidsSelectDialog(TemplateDialog):
             frame_multi_soft.frame.pack(side=TOP, fill='both')
             frame_multi_soft.update_scrollbar()
 
-        #row_okcancel = max(length, cntR, cntC)+1
+        # row_okcancel = max(length, cntR, cntC)+1
         self.ok_cancel_button(frame_okcancel)
         save = Button(frame_okcancel, text='Save', command=lambda: self.save())
         save.pack(side=RIGHT, fill=Y, expand=1, padx=10, pady=5)
@@ -3548,7 +3548,7 @@ class BidsSelectDialog(TemplateDialog):
                 'Subject selection', 'No subjects correspond to your selection. Do you want to continue?')
             if flag:
                 self.select_sub = []
-                #self.select_sub = [sub['sub'] for sub in self.bids_data['Subject']]
+                # self.select_sub = [sub['sub'] for sub in self.bids_data['Subject']]
             else:
                 return
         if self.select_sub:
@@ -4520,7 +4520,7 @@ class RequirementsDialog(TemplateDialog):
             self.req_name = ''
         req_dict = bids.Requirements(filename)
         # fill the subject info
-        #self.remove_lines_command(0, 0)
+        # self.remove_lines_command(0, 0)
         for key, value in req_dict['Requirements']['Subject']['keys'].items():
             req = False
             if 'required_keys' in req_dict['Requirements']['Subject'] and key in req_dict['Requirements']['Subject']['required_keys']:
@@ -4610,7 +4610,7 @@ class RequirementsDialog(TemplateDialog):
                         keys[key].sort()
                         # if len(list_val) < 2:
                         #     list_val = value.split(',')
-                        #keys[key] = [val.replace(' ', '') for val in list_val]
+                        # keys[key] = [val.replace(' ', '') for val in list_val]
                     if self.req_button[i].get():
                         required_keys.append(key)
 
@@ -5093,7 +5093,7 @@ class HandleMultipleSameProcess(TemplateDialog):
         self.title(
             'Select the analysis that should be included in the statistical table.')
         # self.geometry('1000x800')
-        #body_frame = VerticalScrollbarFrame(parent)
+        # body_frame = VerticalScrollbarFrame(parent)
         table_type = Frame(parent)
         lab = Label(
             table_type, text='Choose the type of your statistical table:')
@@ -5140,10 +5140,10 @@ class HandleMultipleSameProcess(TemplateDialog):
         datastore = bids.DatasetDescJSON()
         datastore.read_file(jsonfilename=dataset_file)
         temp_text = ''
-        #canvas_id = frame2display.create_text(10, 10, anchor='nw', font=('Helvetica', 12))
+        # canvas_id = frame2display.create_text(10, 10, anchor='nw', font=('Helvetica', 12))
         for key in datastore:
             temp_text = temp_text + '{0} : {1}\n'.format(key, datastore[key])
-            #frame2display.insert(canvas_id, END, temp_text)
+            # frame2display.insert(canvas_id, END, temp_text)
         lab = Label(frame2display.frame, text=temp_text, anchor='nw',
                     bg='white', font=('Helvetica', 12), justify='left')
         lab.grid(row=0, column=0)
@@ -5301,7 +5301,7 @@ class CheckbuttonList(Frame):
         while idx_var < len(self.variable_string):
             temp = self.variable_string[idx_var]
             self.variable_list.append(IntVar())
-            #self.variable_list[idx_var]._name = temp
+            # self.variable_list[idx_var]._name = temp
             l = Checkbutton(self.frame_button.frame, text=temp,
                             variable=self.variable_list[-1])
             l.grid(row=idx_var, sticky='nsw')

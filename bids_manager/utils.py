@@ -108,7 +108,7 @@ def get_remote_config(config_path):
     filepath = os.path.join(config_path, 'remote_bids_db.json')
     if not os.path.exists(filepath):
         # missing is interpreted as not unwanted
-        return None
+        return dict(), list()
 
     try:
         with open(filepath, 'r') as f:
@@ -118,13 +118,14 @@ def get_remote_config(config_path):
 
     if not remote_config:
         # empty is interpreted as not unwanted
-        return None
+        return dict(), list()
 
     if "bids_databases" not in remote_config.keys():
         raise ValueError("Missing 'bids_databases' in remote configuration")
 
     keys = ['db_name', 'db_path']
     valid_config = {'bids_databases': list()}
+    # list of bad configurations
     bad_config = list()
     if isinstance(remote_config["bids_databases"], list):
         for config in remote_config["bids_databases"]:
