@@ -50,8 +50,10 @@ def _create_release(source_path, dest_path):
         shutil.copytree(os.path.join(source_path, APP_UTILS, 'deface_needs'), os.path.join(
             dest_path, 'deface_needs'), dirs_exist_ok=True)
         # for connection with BIDS Manager Server (internal use)
-        shutil.copytree(os.path.join(source_path, APP_UTILS, 'config'), os.path.join(
-            dest_path, 'config'), dirs_exist_ok=True)
+        config_folder = os.path.join(source_path, APP_UTILS, 'config')
+        if os.path.exists(config_folder):
+            shutil.copytree(config_folder, os.path.join(
+                dest_path, 'config'), dirs_exist_ok=True)
     except Exception as ex:
         raise ex
 
